@@ -1,0 +1,27 @@
+{
+  "name": "AshxFacebook HD Reel Studio",
+  "short_name": "AshxFacebook",
+  "description": "Premium 1080p HD Facebook Reel & Video Downloader",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07070A",
+  "theme_color": "#07070A",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='128' fill='%2307070A'/><circle cx='256' cy='256' r='180' fill='%23181926'/><polygon points='210,170 340,256 210,342' fill='%23FFFFFF'/></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
+}
