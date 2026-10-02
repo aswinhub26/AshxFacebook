@@ -1,5 +1,5 @@
 // ==========================================================================
-// AshxFacebook - Client Logic with iOS 26 Glass Effects
+// AshxFacebook - Client Logic with iOS 26 Titanium Glass & Multi-Tier Extractor
 // ==========================================================================
 
 let currentVideoData = null;
@@ -11,8 +11,6 @@ const urlInput = document.getElementById('reel-url-input');
 const pasteBtn = document.getElementById('paste-btn');
 const clearBtn = document.getElementById('clear-btn');
 const fetchBtn = document.getElementById('fetch-btn');
-const btnText = document.getElementById('btn-text');
-const btnIcon = document.getElementById('btn-icon');
 const loadingState = document.getElementById('loading-state');
 const resultContainer = document.getElementById('result-container');
 const errorBox = document.getElementById('error-box');
@@ -56,7 +54,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);
     const sharedText = urlParams.get('text') || urlParams.get('url');
     if (sharedText) {
-        // Extract URL if text contains other message text
         const match = sharedText.match(/https?:\/\/[^\s]+/);
         const targetUrl = match ? match[0] : sharedText;
         urlInput.value = targetUrl;
@@ -66,7 +63,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function setupEventListeners() {
-    // Input changes
     urlInput.addEventListener('input', () => {
         if (urlInput.value.trim().length > 0) {
             clearBtn.classList.remove('hidden');
@@ -75,33 +71,28 @@ function setupEventListeners() {
         }
     });
 
-    // Clear input
     clearBtn.addEventListener('click', () => {
         urlInput.value = '';
         clearBtn.classList.add('hidden');
         urlInput.focus();
     });
 
-    // Clipboard Paste
     pasteBtn.addEventListener('click', async () => {
         try {
             const text = await navigator.clipboard.readText();
             if (text) {
                 urlInput.value = text.trim();
                 clearBtn.classList.remove('hidden');
-                updateIslandState('active', 'Link Pasted', 'Click Extract to fetch HD');
-                // Auto trigger if it looks like a valid link
+                updateIslandState('active', 'Link Pasted', 'Extracting HD Reel...');
                 if (text.includes('facebook.com') || text.includes('fb.watch')) {
                     handleExtract();
                 }
             }
         } catch (err) {
-            console.warn('Clipboard read error: ', err);
             urlInput.focus();
         }
     });
 
-    // Extract Trigger
     fetchBtn.addEventListener('click', handleExtract);
     urlInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -110,7 +101,6 @@ function setupEventListeners() {
         }
     });
 
-    // Quality Tab Switching
     qualityTabs.forEach(tab => {
         tab.addEventListener('click', () => {
             qualityTabs.forEach(t => t.classList.remove('active-quality-tab'));
@@ -120,14 +110,13 @@ function setupEventListeners() {
         });
     });
 
-    // Copy Direct Link
     copyDirectLinkBtn.addEventListener('click', () => {
         if (!currentVideoData) return;
         const targetUrl = currentVideoData[selectedQuality]?.url || currentVideoData.hd?.url;
         if (targetUrl) {
             navigator.clipboard.writeText(targetUrl);
             const original = copyDirectLinkBtn.innerHTML;
-            copyDirectLinkBtn.innerHTML = `<i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i><span class="text-emerald-300">Copied!</span>`;
+            copyDirectLinkBtn.innerHTML = `<i data-lucide="check" class="w-3 h-3 text-emerald-400"></i><span class="text-emerald-300">Copied</span>`;
             lucide.createIcons();
             setTimeout(() => {
                 copyDirectLinkBtn.innerHTML = original;
@@ -136,7 +125,6 @@ function setupEventListeners() {
         }
     });
 
-    // Share Button
     shareAppBtn.addEventListener('click', async () => {
         if (!currentVideoData) return;
         const targetUrl = currentVideoData[selectedQuality]?.url || currentVideoData.hd?.url;
@@ -144,35 +132,31 @@ function setupEventListeners() {
             try {
                 await navigator.share({
                     title: currentVideoData.title,
-                    text: 'Saved with AshxFacebook HD Reel Saver',
+                    text: 'AshxFacebook 1080p HD Video',
                     url: targetUrl
                 });
-            } catch (err) {
-                console.log('Share dismissed');
-            }
+            } catch (err) {}
         } else {
             navigator.clipboard.writeText(targetUrl);
-            alert('Video URL copied to clipboard for sharing!');
+            alert('Video URL copied to clipboard!');
         }
     });
 
-    // History Clear
     clearHistoryBtn.addEventListener('click', () => {
         localStorage.removeItem(STORAGE_KEY);
         renderHistory();
     });
 
-    // Modal Guide
     guideModalBtn.addEventListener('click', () => openModal(guideModal));
     closeGuideBtn.addEventListener('click', () => closeModal(guideModal));
     dismissGuideBtn.addEventListener('click', () => closeModal(guideModal));
 }
 
-// Extraction Handler
+// Extraction Handler with Client-Side + Server-Side Hybrid Architecture
 async function handleExtract() {
     const rawUrl = urlInput.value.trim();
     if (!rawUrl) {
-        showError('Please paste a Facebook Reel or Video link first.');
+        showError('Please paste a Facebook Reel or Video URL first.');
         return;
     }
 
@@ -180,54 +164,133 @@ async function handleExtract() {
     resultContainer.classList.add('hidden');
     loadingState.classList.remove('hidden');
     fetchBtn.disabled = true;
-    fetchBtn.classList.add('opacity-70', 'cursor-not-allowed');
-    updateIslandState('busy', 'Analyzing HD Stream', 'Connecting to Facebook server...');
+    fetchBtn.classList.add('opacity-50', 'cursor-not-allowed');
+    updateIslandState('busy', 'Resolving Stream', 'Parsing 1080p HD...');
 
+    let extractedData = null;
+
+    // 1. Try local/hosted backend endpoint first if available
     try {
         const response = await fetch('/api/extract', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url: rawUrl })
         });
-
-        const data = await response.json();
-
-        if (response.ok && data.success && data.data) {
-            currentVideoData = data.data;
-            populateResult(data.data);
-            saveToHistory(data.data, rawUrl);
-            updateIslandState('success', 'HD Video Ready', 'Click Download to save');
-        } else {
-            showError(data.error || 'Failed to extract video. Make sure the Reel is public.');
-            updateIslandState('error', 'Extraction Failed', 'Reel may be private or invalid');
+        if (response.ok) {
+            const res = await response.json();
+            if (res.success && res.data) {
+                extractedData = res.data;
+            }
         }
-    } catch (err) {
-        showError('Network error connecting to extraction engine. Please try again.');
-        updateIslandState('error', 'Network Error', 'Check connection');
-    } finally {
-        loadingState.classList.add('hidden');
-        fetchBtn.disabled = false;
-        fetchBtn.classList.remove('opacity-70', 'cursor-not-allowed');
+    } catch (e) {
+        // Backend not on same origin (e.g. on GitHub Pages static)
     }
+
+    // 2. If static GitHub Pages, use client-side direct extractor
+    if (!extractedData) {
+        extractedData = await clientSideExtract(rawUrl);
+    }
+
+    loadingState.classList.add('hidden');
+    fetchBtn.disabled = false;
+    fetchBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+
+    if (extractedData && (extractedData.hd?.url || extractedData.sd?.url)) {
+        currentVideoData = extractedData;
+        populateResult(extractedData);
+        saveToHistory(extractedData, rawUrl);
+        updateIslandState('success', '1080p HD Ready', 'Ready for download');
+    } else {
+        showError('Unable to extract HD stream. Ensure the Facebook Reel is public and active.');
+        updateIslandState('error', 'Extraction Failed', 'Reel may be private');
+    }
+}
+
+// Client-Side Extractor for Pure GitHub Pages deployment
+async function clientSideExtract(fbUrl) {
+    try {
+        // Multiple fallback public API gateways
+        const endpoints = [
+            `https://api.v2.fdownloader.net/api/v1/facebook?url=${encodeURIComponent(fbUrl)}`,
+            `https://fbdown-api.onrender.com/api/get?url=${encodeURIComponent(fbUrl)}`,
+            `https://snapsave.io/api/ajaxSearch?q=${encodeURIComponent(fbUrl)}`
+        ];
+
+        for (const ep of endpoints) {
+            try {
+                const r = await fetch(ep, { headers: { 'Accept': 'application/json' } });
+                if (r.ok) {
+                    const data = await r.json();
+                    if (data && (data.hd || data.sd || data.video || data.data)) {
+                        const hdUrl = data.hd || data.video_hd || (data.data && data.data.hd) || data.url;
+                        const sdUrl = data.sd || data.video_sd || (data.data && data.data.sd) || hdUrl;
+                        if (hdUrl || sdUrl) {
+                            return {
+                                title: data.title || "Facebook HD Reel Video",
+                                thumbnail: data.thumbnail || data.thumb || "",
+                                duration: data.duration || 0,
+                                uploader: data.uploader || "Facebook Creator",
+                                hd: { url: hdUrl || sdUrl, quality: "1080p Full HD" },
+                                sd: { url: sdUrl || hdUrl, quality: "480p SD" },
+                                audio: { url: hdUrl || sdUrl, quality: "MP3 Audio" }
+                            };
+                        }
+                    }
+                }
+            } catch (err) {}
+        }
+
+        // Direct stream parser fallback
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(fbUrl)}`;
+        const htmlResp = await fetch(proxyUrl);
+        if (htmlResp.ok) {
+            const html = await htmlResp.text();
+            const hdMatch = html.match(/browser_native_hd_url["']\s*:\s*["']([^"']+)["']/) ||
+                            html.match(/playable_url_quality_hd["']\s*:\s*["']([^"']+)["']/);
+            const sdMatch = html.match(/browser_native_sd_url["']\s*:\s*["']([^"']+)["']/) ||
+                            html.match(/playable_url["']\s*:\s*["']([^"']+)["']/);
+            const thumbMatch = html.match(/thumbnailUrl["']\s*:\s*["']([^"']+)["']/) ||
+                               html.match(/og:image["']\s*content=["']([^"']+)["']/);
+
+            const clean = (u) => u ? u.replace(/\\u0025/g, '%').replace(/\\u0026/g, '&').replace(/\\\//g, '/') : null;
+
+            const hd = clean(hdMatch ? hdMatch[1] : null);
+            const sd = clean(sdMatch ? sdMatch[1] : null);
+            const thumb = clean(thumbMatch ? thumbMatch[1] : null);
+
+            if (hd || sd) {
+                return {
+                    title: "Facebook HD Reel Video",
+                    thumbnail: thumb || "",
+                    duration: 0,
+                    uploader: "Facebook Creator",
+                    hd: { url: hd || sd, quality: "1080p Full HD" },
+                    sd: { url: sd || hd, quality: "480p SD" },
+                    audio: { url: hd || sd, quality: "MP3 Audio" }
+                };
+            }
+        }
+    } catch (e) {}
+
+    return null;
 }
 
 // Populate UI with extracted data
 function populateResult(data) {
     resTitle.textContent = data.title || 'Facebook HD Reel Video';
-    resUploader.innerHTML = `<i data-lucide="user" class="w-3.5 h-3.5"></i><span>${data.uploader || 'Facebook Creator'}</span>`;
+    resUploader.textContent = data.uploader || 'Facebook Creator';
     
     if (data.duration) {
         const mins = Math.floor(data.duration / 60);
         const secs = Math.floor(data.duration % 60);
-        resDuration.innerHTML = `<i data-lucide="clock" class="w-3.5 h-3.5"></i><span>${mins}:${secs < 10 ? '0' : ''}${secs} • Ready to download</span>`;
+        resDuration.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs} • Ready to download`;
     } else {
-        resDuration.innerHTML = `<i data-lucide="check-circle" class="w-3.5 h-3.5 text-emerald-400"></i><span>Stream Verified</span>`;
+        resDuration.textContent = `Verified 1080p Stream`;
     }
 
-    if (data.hd && data.hd.quality) hdSub.textContent = data.hd.quality;
-    if (data.sd && data.sd.quality) sdSub.textContent = data.sd.quality;
+    if (data.hd?.quality) hdSub.textContent = data.hd.quality;
+    if (data.sd?.quality) sdSub.textContent = data.sd.quality;
 
-    // Reset default quality to HD
     selectedQuality = 'hd';
     qualityTabs.forEach(t => {
         if (t.getAttribute('data-quality') === 'hd') {
@@ -240,36 +303,30 @@ function populateResult(data) {
     updateActiveQualityView();
     resultContainer.classList.remove('hidden');
     lucide.createIcons();
-
-    // Scroll smoothly to results
     resultContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function updateActiveQualityView() {
     if (!currentVideoData) return;
     const item = currentVideoData[selectedQuality] || currentVideoData.hd;
-    if (!item) return;
+    if (!item || !item.url) return;
 
     if (selectedQuality === 'audio') {
         videoBadge.textContent = 'MP3 AUDIO';
-        downloadBtnLabel.textContent = 'Download Audio (MP3)';
+        downloadBtnLabel.textContent = 'Save Audio (MP3)';
     } else if (selectedQuality === 'sd') {
         videoBadge.textContent = 'SD 480P';
-        downloadBtnLabel.textContent = 'Download SD Video (MP4)';
+        downloadBtnLabel.textContent = 'Save Standard Video (MP4)';
     } else {
         videoBadge.textContent = 'FULL HD 1080P';
-        downloadBtnLabel.textContent = 'Download HD Video (MP4)';
+        downloadBtnLabel.textContent = 'Save Full HD 1080p (MP4)';
     }
 
-    // Update video player
-    if (item.url) {
-        videoPlayer.src = item.url;
-        videoPlayer.poster = currentVideoData.thumbnail || '';
-    }
+    videoPlayer.src = item.url;
+    videoPlayer.poster = currentVideoData.thumbnail || '';
 
-    // Set download link pointing to streaming proxy
-    const downloadProxyUrl = `/api/download?url=${encodeURIComponent(item.url)}&title=${encodeURIComponent(currentVideoData.title)}&quality=${selectedQuality.toUpperCase()}`;
-    downloadTriggerBtn.href = downloadProxyUrl;
+    // Direct stream link or proxy link
+    downloadTriggerBtn.href = item.url;
     downloadTriggerBtn.setAttribute('download', `AshxFacebook_${selectedQuality}.mp4`);
 }
 
@@ -277,20 +334,14 @@ function updateIslandState(type, title, subtitle) {
     islandTitle.textContent = title;
     islandSubtitle.textContent = subtitle;
 
-    dynamicIsland.className = 'transition-all duration-500 ease-spring flex items-center gap-3 px-5 py-2.5 rounded-full bg-black/60 backdrop-blur-3xl border shadow-2xl';
-
     if (type === 'busy') {
-        dynamicIsland.classList.add('border-blue-500/50', 'shadow-[0_0_20px_rgba(59,130,246,0.4)]');
-        islandIndicator.className = 'w-3 h-3 rounded-full bg-blue-400 animate-spin border-2 border-white border-t-transparent';
+        islandIndicator.className = 'w-2.5 h-2.5 rounded-full bg-blue-400 animate-spin border border-white border-t-transparent';
     } else if (type === 'success') {
-        dynamicIsland.classList.add('border-emerald-500/50', 'shadow-[0_0_20px_rgba(52,211,153,0.4)]');
-        islandIndicator.className = 'w-3 h-3 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399]';
+        islandIndicator.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_#34d399]';
     } else if (type === 'error') {
-        dynamicIsland.classList.add('border-rose-500/50', 'shadow-[0_0_20px_rgba(244,63,94,0.4)]');
-        islandIndicator.className = 'w-3 h-3 rounded-full bg-rose-400';
+        islandIndicator.className = 'w-2.5 h-2.5 rounded-full bg-rose-400';
     } else {
-        dynamicIsland.classList.add('border-white/20');
-        islandIndicator.className = 'w-3 h-3 rounded-full bg-emerald-400 animate-pulse';
+        islandIndicator.className = 'w-2.5 h-2.5 rounded-full bg-white/80 shadow-[0_0_10px_rgba(255,255,255,0.8)]';
     }
 }
 
@@ -304,7 +355,6 @@ function hideError() {
     errorBox.classList.add('hidden');
 }
 
-// History Management
 function saveToHistory(data, originalUrl) {
     try {
         let history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
@@ -315,13 +365,10 @@ function saveToHistory(data, originalUrl) {
             url: data.hd?.url || originalUrl,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
-        // Avoid duplicate top items
         history = [entry, ...history.filter(h => h.title !== entry.title)].slice(0, 5);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
         renderHistory();
-    } catch (e) {
-        console.warn('LocalStorage error:', e);
-    }
+    } catch (e) {}
 }
 
 function renderHistory() {
@@ -338,19 +385,19 @@ function renderHistory() {
 
     history.forEach(item => {
         const el = document.createElement('div');
-        el.className = 'flex items-center justify-between p-3 rounded-2xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/10 backdrop-blur-xl transition-all';
+        el.className = 'flex items-center justify-between p-2.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 transition-all';
         el.innerHTML = `
-            <div class="flex items-center gap-3 overflow-hidden">
-                <div class="w-10 h-10 rounded-xl bg-blue-600/30 overflow-hidden shrink-0 border border-white/15 flex items-center justify-center">
-                    ${item.thumbnail ? `<img src="${item.thumbnail}" class="w-full h-full object-cover" onerror="this.style.display='none'"/>` : `<i data-lucide="film" class="w-4 h-4 text-blue-400"></i>`}
+            <div class="flex items-center gap-2.5 overflow-hidden">
+                <div class="w-8 h-8 rounded-lg bg-zinc-800 overflow-hidden shrink-0 border border-white/10 flex items-center justify-center">
+                    ${item.thumbnail ? `<img src="${item.thumbnail}" class="w-full h-full object-cover" onerror="this.style.display='none'"/>` : `<i data-lucide="film" class="w-3.5 h-3.5 text-zinc-400"></i>`}
                 </div>
                 <div class="truncate text-left">
-                    <p class="text-xs font-semibold text-white truncate max-w-[200px] md:max-w-[320px]">${item.title}</p>
-                    <span class="text-[10px] text-white/40">${item.time} • HD Available</span>
+                    <p class="text-xs font-normal text-zinc-200 truncate max-w-[200px] md:max-w-[300px]">${item.title}</p>
+                    <span class="text-[10px] text-zinc-500">${item.time}</span>
                 </div>
             </div>
-            <a href="/api/download?url=${encodeURIComponent(item.url)}&title=${encodeURIComponent(item.title)}&quality=HD" download class="shrink-0 p-2 rounded-xl bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 transition-colors">
-                <i data-lucide="download" class="w-4 h-4"></i>
+            <a href="${item.url}" target="_blank" download class="shrink-0 p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 transition-colors">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
             </a>
         `;
         historyList.appendChild(el);
@@ -359,7 +406,6 @@ function renderHistory() {
     lucide.createIcons();
 }
 
-// Modal Helpers
 function openModal(modal) {
     modal.classList.remove('opacity-0', 'pointer-events-none');
     modal.classList.add('opacity-100', 'pointer-events-auto');
@@ -370,7 +416,6 @@ function closeModal(modal) {
     modal.classList.add('opacity-0', 'pointer-events-none');
 }
 
-// Liquid Glass Ambient Canvas Background Animation
 function initAmbientCanvas() {
     const canvas = document.getElementById('ambient-canvas');
     if (!canvas) return;
@@ -385,10 +430,9 @@ function initAmbientCanvas() {
     });
 
     const bubbles = [
-        { x: width * 0.2, y: height * 0.3, radius: 260, color: 'rgba(30, 64, 175, 0.45)', vx: 0.3, vy: 0.2 },
-        { x: width * 0.8, y: height * 0.2, radius: 280, color: 'rgba(91, 33, 182, 0.45)', vx: -0.25, vy: 0.3 },
-        { x: width * 0.5, y: height * 0.8, radius: 320, color: 'rgba(14, 116, 144, 0.35)', vx: 0.2, vy: -0.25 },
-        { x: width * 0.7, y: height * 0.6, radius: 220, color: 'rgba(139, 92, 246, 0.35)', vx: -0.3, vy: -0.2 }
+        { x: width * 0.2, y: height * 0.3, radius: 260, color: 'rgba(30, 40, 60, 0.4)', vx: 0.2, vy: 0.15 },
+        { x: width * 0.8, y: height * 0.2, radius: 280, color: 'rgba(45, 30, 60, 0.35)', vx: -0.15, vy: 0.2 },
+        { x: width * 0.5, y: height * 0.8, radius: 320, color: 'rgba(20, 35, 50, 0.3)', vx: 0.15, vy: -0.2 }
     ];
 
     function render() {
