@@ -1,8 +1,8 @@
 {
-  "name": "AshxFacebook HD Reel Studio",
-  "short_name": "AshxFacebook",
-  "description": "Premium 1080p HD Facebook Reel & Video Downloader",
-  "start_url": "/",
+  "name": "Ashx Studio HD Video Downloader",
+  "short_name": "AshxStudio",
+  "description": "Premium 1080p HD Video & Media Downloader",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#07070A",
   "theme_color": "#07070A",
@@ -16,7 +16,7 @@
     }
   ],
   "share_target": {
-    "action": "/",
+    "action": "./index.html",
     "method": "GET",
     "params": {
       "title": "title",
