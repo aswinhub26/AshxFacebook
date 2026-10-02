@@ -1,18 +1,43 @@
 {
+  "id": "ashx-studio-hd-downloader-v1",
   "name": "Ashx Studio HD Video Downloader",
   "short_name": "AshxStudio",
-  "description": "Premium 1080p HD Video & Media Downloader",
+  "description": "Premium 1080p Full HD Video and Reel Downloader Studio",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#07070A",
   "theme_color": "#07070A",
   "orientation": "portrait-primary",
+  "categories": ["utilities", "video", "multimedia"],
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='128' fill='%2307070A'/><circle cx='256' cy='256' r='180' fill='%23181926'/><polygon points='210,170 340,256 210,342' fill='%23FFFFFF'/></svg>",
-      "sizes": "512x512",
-      "type": "image/svg+xml",
+      "src": "./static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "./static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "./static/screenshot1.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Ashx Studio HD Reel Downloader Interface"
+    },
+    {
+      "src": "./static/screenshot1.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Ashx Studio HD Video Player"
     }
   ],
   "share_target": {
