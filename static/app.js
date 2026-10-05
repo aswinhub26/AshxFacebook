@@ -93,7 +93,11 @@ function setupEventListeners() {
         }
     });
 
-    fetchBtn.addEventListener('click', handleExtract);
+    fetchBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        handleExtract();
+    });
+
     urlInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -118,7 +122,14 @@ function setupEventListeners() {
             const original = copyDirectLinkBtn.innerHTML;
             copyDirectLinkBtn.innerHTML = `<i data-lucide="check" class="w-3 h-3 text-emerald-400"></i><span class="text-emerald-300">Copied</span>`;
             lucide.createIcons();
-    // Universal Mobile Direct Downloader (Fix for Mobile Chrome & Safari CORS download issue)
+            setTimeout(() => {
+                copyDirectLinkBtn.innerHTML = original;
+                lucide.createIcons();
+            }, 2000);
+        }
+    });
+
+    // Mobile & Desktop Blob Downloader
     downloadTriggerBtn.addEventListener('click', async (e) => {
         e.preventDefault();
         if (!currentVideoData) return;
@@ -186,12 +197,11 @@ function setupEventListeners() {
                     break;
                 }
             } catch (err) {
-                console.warn('Proxy attempt failed, trying next...');
+                console.warn('Blob fetch failed, falling back...');
             }
         }
 
         if (!success) {
-            // Fallback: Open direct stream with target _blank
             downloadBtnLabel.innerHTML = `Opening direct video...`;
             window.open(item.url, '_blank');
             updateIslandState('active', 'Video Stream Opened', 'Tap & hold video to Save');
@@ -239,7 +249,6 @@ async function handleExtract() {
         return;
     }
 
-    // Extract actual Facebook URL if full share text was pasted
     const urlMatch = rawUrl.match(/https?:\/\/[^\s]+/i);
     if (urlMatch) {
         rawUrl = urlMatch[0];
@@ -263,7 +272,7 @@ async function handleExtract() {
     // 1. Try local/hosted backend endpoint first if available (with timeout)
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
         const response = await fetch('/api/extract', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -278,7 +287,7 @@ async function handleExtract() {
             }
         }
     } catch (e) {
-        // Backend not available (GitHub Pages static host)
+        // Backend not on same origin (GitHub Pages static host)
     }
 
     // 2. Client-Side Multi-Gateway Extractor
@@ -303,8 +312,6 @@ async function handleExtract() {
 
 // Client-Side Extractor with Multiple Fallback Gateways
 async function clientSideExtract(fbUrl) {
-    const cleanUrl = fbUrl.split('?')[0].replace(/\/+$/, '');
-
     // Gateway 1: Cobalt API (High speed, lossless)
     try {
         const r = await fetch('https://co.wuk.sh/api/json', {
@@ -439,10 +446,6 @@ function updateActiveQualityView() {
 
     videoPlayer.src = item.url;
     videoPlayer.poster = currentVideoData.thumbnail || '';
-
-    // Direct stream link or proxy link
-    downloadTriggerBtn.href = item.url;
-    downloadTriggerBtn.setAttribute('download', `AshxFacebook_${selectedQuality}.mp4`);
 }
 
 function updateIslandState(type, title, subtitle) {
