@@ -21,14 +21,13 @@ if has_cors:
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
     'Accept-Language': 'en-US,en;q=0.9',
 }
 
 def clean_url(raw_url: str) -> str:
     """Cleans social URLs and resolves redirects."""
     raw_url = raw_url.strip()
-    # Match share links that need redirect resolution
     if any(k in raw_url for k in ['share/r/', 'share/v/', 'youtu.be/', 'fb.watch/']):
         try:
             resp = requests.head(raw_url, headers=HEADERS, allow_redirects=True, timeout=5)
@@ -41,49 +40,66 @@ def clean_url(raw_url: str) -> str:
 def extract_media(url: str):
     """Multi-platform media extractor for FB Reels, Insta Reels, YouTube Shorts, etc."""
     ydl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'format': 'best[ext=mp4]/bestvideo+bestaudio/best',
         'quiet': True,
         'no_warnings': True,
         'skip_download': True,
         'extract_flat': False,
-        'http_headers': HEADERS
+        'http_headers': HEADERS,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'ios', 'mweb', 'web']
+            }
+        }
     }
     
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
-        
         formats = info.get('formats', [])
-        hd_format = None
-        sd_format = None
-        audio_format = None
         
-        video_formats = [f for f in formats if f.get('vcodec') != 'none' and f.get('url')]
-        audio_formats = [f for f in formats if f.get('acodec') != 'none' and f.get('url')]
-        
-        if video_formats:
-            combined = [f for f in video_formats if f.get('acodec') != 'none']
-            if combined:
-                combined.sort(key=lambda x: (x.get('height') or 0, x.get('tbr') or 0), reverse=True)
-                hd_format = combined[0]
-                sd_format = combined[-1] if len(combined) > 1 else combined[0]
-            else:
-                video_formats.sort(key=lambda x: (x.get('height') or 0, x.get('tbr') or 0), reverse=True)
-                hd_format = video_formats[0]
-                sd_format = video_formats[-1] if len(video_formats) > 1 else video_formats[0]
-                
-        if audio_formats:
-            audio_formats.sort(key=lambda x: x.get('abr') or 0, reverse=True)
-            audio_format = audio_formats[0]
+        # 1. Progressive formats (both video and audio with direct HTTP/HTTPS url)
+        prog_videos = [
+            f for f in formats 
+            if f.get('vcodec') != 'none' and f.get('acodec') != 'none' 
+            and f.get('url') and 'm3u8' not in f.get('protocol', '')
+        ]
+        prog_videos.sort(key=lambda x: (x.get('height') or 0, x.get('tbr') or 0), reverse=True)
 
-        direct_hd_url = hd_format.get('url') if hd_format else info.get('url')
-        direct_sd_url = sd_format.get('url') if sd_format else direct_hd_url
-        direct_audio_url = audio_format.get('url') if audio_format else direct_hd_url
+        # 2. Direct video formats (if progressive not present)
+        all_videos = [
+            f for f in formats 
+            if f.get('vcodec') != 'none' and f.get('url') 
+            and 'm3u8' not in f.get('protocol', '')
+        ]
+        all_videos.sort(key=lambda x: (x.get('height') or 0, x.get('tbr') or 0), reverse=True)
+
+        # 3. Direct audio formats
+        audios = [
+            f for f in formats 
+            if f.get('acodec') != 'none' and f.get('url') 
+            and 'm3u8' not in f.get('protocol', '')
+        ]
+        audios.sort(key=lambda x: (x.get('abr') or x.get('tbr') or 0), reverse=True)
+
+        chosen_hd = prog_videos[0] if prog_videos else (all_videos[0] if all_videos else None)
+        chosen_sd = prog_videos[-1] if prog_videos else (all_videos[-1] if all_videos else None)
+        chosen_audio = audios[0] if audios else (chosen_hd if chosen_hd else None)
+
+        direct_hd_url = chosen_hd.get('url') if chosen_hd else info.get('url')
+        direct_sd_url = chosen_sd.get('url') if chosen_sd else direct_hd_url
+        direct_audio_url = chosen_audio.get('url') if chosen_audio else direct_hd_url
 
         platform = "Universal"
         if "facebook" in url or "fb.watch" in url: platform = "Facebook"
         elif "instagram" in url: platform = "Instagram"
         elif "youtube" in url or "youtu.be" in url: platform = "YouTube"
         elif "whatsapp" in url: platform = "WhatsApp"
+
+        hd_height = chosen_hd.get('height') if chosen_hd else None
+        sd_height = chosen_sd.get('height') if chosen_sd else None
+        
+        hd_label = f"{hd_height}p Full HD" if hd_height else "1080p Full HD"
+        sd_label = f"{sd_height}p SD" if sd_height else "480p Standard"
 
         return {
             "platform": platform,
@@ -94,12 +110,12 @@ def extract_media(url: str):
             "uploader": info.get('uploader') or info.get('channel') or f"{platform} Creator",
             "hd": {
                 "url": direct_hd_url,
-                "quality": f"{hd_format.get('height', '1080')}p Full HD" if hd_format and hd_format.get('height') else "1080p Full HD",
+                "quality": hd_label,
                 "ext": "mp4"
             },
             "sd": {
                 "url": direct_sd_url,
-                "quality": f"{sd_format.get('height', '480')}p SD" if sd_format and sd_format.get('height') else "480p Standard",
+                "quality": sd_label,
                 "ext": "mp4"
             },
             "audio": {
@@ -152,34 +168,58 @@ def extract():
 
 @app.route('/api/download')
 def download():
-    """Streaming proxy to force download with clean filename."""
-    video_url = request.args.get('url')
-    title = request.args.get('title', 'AshxStudio_Media')
-    ext = request.args.get('ext', 'mp4')
+    """High-speed streaming proxy ensuring 100% genuine MP4/MP3 media byte delivery."""
+    video_url = request.args.get('url', '').strip()
+    title = request.args.get('title', 'AshxStudio_Media').strip()
+    ext = request.args.get('ext', 'mp4').strip().lower()
     
     if not video_url:
-        return "Missing media URL", 400
+        return jsonify({"error": "Missing media URL"}), 400
         
-    safe_title = re.sub(r'[^a-zA-Z0-9_-]', '_', title)[:35]
+    safe_title = re.sub(r'[^a-zA-Z0-9_-]', '_', title)[:40]
     filename = f"AshxStudio_{safe_title}.{ext}"
-
-    def stream_content():
-        with requests.get(video_url, headers={'User-Agent': HEADERS['User-Agent']}, stream=True, timeout=30) as r:
-            r.raise_for_status()
-            for chunk in r.iter_content(chunk_size=65536):
-                if chunk:
-                    yield chunk
-
     mime = 'audio/mpeg' if ext == 'mp3' else 'video/mp4'
 
-    return Response(
-        stream_with_context(stream_content()),
-        headers={
+    try:
+        req_headers = {
+            'User-Agent': HEADERS['User-Agent'],
+            'Accept': '*/*',
+            'Accept-Encoding': 'identity',
+            'Referer': 'https://www.google.com/'
+        }
+        
+        upstream_resp = requests.get(video_url, headers=req_headers, stream=True, timeout=60, allow_redirects=True)
+        
+        # Verify upstream returned actual media, not an HTML error or block page
+        content_type = upstream_resp.headers.get('Content-Type', '')
+        if 'text/html' in content_type or upstream_resp.status_code >= 400:
+            logger.warning(f"Upstream returned non-media response: {upstream_resp.status_code} {content_type}")
+            return jsonify({"error": "Direct media link expired or blocked. Please refresh and try again."}), 502
+
+        def stream_content():
+            try:
+                for chunk in upstream_resp.iter_content(chunk_size=65536):
+                    if chunk:
+                        yield chunk
+            except Exception as e:
+                logger.error(f"Stream error: {e}")
+
+        resp_headers = {
             'Content-Disposition': f'attachment; filename="{filename}"',
             'Content-Type': mime,
-            'Cache-Control': 'no-cache'
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
         }
-    )
+        
+        if 'Content-Length' in upstream_resp.headers:
+            resp_headers['Content-Length'] = upstream_resp.headers['Content-Length']
+
+        return Response(stream_with_context(stream_content()), headers=resp_headers)
+
+    except Exception as e:
+        logger.error(f"Download stream error: {e}")
+        return jsonify({"error": f"Failed to download media: {str(e)}"}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

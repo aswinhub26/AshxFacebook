@@ -149,7 +149,7 @@ function setupEventListeners() {
         }
     });
 
-    // Universal Mobile & Desktop Blob Downloader (MP4 / MP3)
+    // Universal High-Speed Media Downloader (MP4 / MP3)
     downloadTriggerBtn.addEventListener('click', async (e) => {
         e.preventDefault();
         if (!currentVideoData) return;
@@ -160,25 +160,25 @@ function setupEventListeners() {
         const ext = isAudio ? 'mp3' : 'mp4';
         const originalLabel = downloadBtnLabel.innerHTML;
         const originalBg = downloadTriggerBtn.className;
-        downloadBtnLabel.textContent = isAudio ? "Extracting MP3 0%..." : "Downloading 0%...";
+        
+        downloadBtnLabel.textContent = isAudio ? "Extracting MP3..." : "Downloading HD Video...";
         downloadTriggerBtn.classList.add('opacity-75', 'pointer-events-none');
-        updateIslandState('busy', isAudio ? 'Saving MP3' : 'Saving Video', 'Streaming file...');
+        updateIslandState('busy', isAudio ? 'Saving Audio' : 'Saving Video', 'Connecting high-speed stream...');
 
-        const safeTitle = (currentVideoData.title || 'AshxStudio_Media').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
-        const fileName = `${safeTitle}_${selectedQuality.toUpperCase()}.${ext}`;
+        const safeTitle = (currentVideoData.title || 'AshxStudio_Media').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 35);
+        const fileName = `AshxStudio_${safeTitle}_${selectedQuality.toUpperCase()}.${ext}`;
+        const downloadApiUrl = `/api/download?url=${encodeURIComponent(item.url)}&title=${encodeURIComponent(safeTitle)}&ext=${ext}`;
 
-        let success = false;
+        let downloadSuccess = false;
 
-        const fetchUrls = [
-            item.url,
-            `https://api.allorigins.win/raw?url=${encodeURIComponent(item.url)}`,
-            `https://corsproxy.io/?${encodeURIComponent(item.url)}`
-        ];
-
-        for (const fUrl of fetchUrls) {
-            try {
-                const resp = await fetch(fUrl);
-                if (resp.ok) {
+        try {
+            // First attempt: fetch through our robust backend proxy with real-time progress
+            const resp = await fetch(downloadApiUrl);
+            
+            if (resp.ok) {
+                const contentType = resp.headers.get('Content-Type') || '';
+                // Check if backend returned valid media stream
+                if (contentType.includes('video') || contentType.includes('audio') || contentType.includes('application/octet-stream')) {
                     const reader = resp.body.getReader();
                     const contentLength = +resp.headers.get('Content-Length') || 0;
                     let receivedLength = 0;
@@ -189,8 +189,9 @@ function setupEventListeners() {
                         if (done) break;
                         chunks.push(value);
                         receivedLength += value.length;
+                        
                         if (contentLength > 0) {
-                            const percent = Math.round((receivedLength / contentLength) * 100);
+                            const percent = Math.min(100, Math.round((receivedLength / contentLength) * 100));
                             downloadBtnLabel.textContent = `Downloading ${percent}%...`;
                         } else {
                             const mb = (receivedLength / (1024 * 1024)).toFixed(1);
@@ -198,35 +199,47 @@ function setupEventListeners() {
                         }
                     }
 
-                    const mime = isAudio ? 'audio/mpeg' : 'video/mp4';
-                    const blob = new Blob(chunks, { type: mime });
-                    const blobUrl = window.URL.createObjectURL(blob);
-                    
-                    const tempLink = document.createElement('a');
-                    tempLink.style.display = 'none';
-                    tempLink.href = blobUrl;
-                    tempLink.download = fileName;
-                    document.body.appendChild(tempLink);
-                    tempLink.click();
-                    setTimeout(() => {
-                        document.body.removeChild(tempLink);
-                        window.URL.revokeObjectURL(blobUrl);
-                    }, 2000);
+                    // Only save if received at least 50KB of genuine binary data
+                    if (receivedLength > 50000) {
+                        const mime = isAudio ? 'audio/mpeg' : 'video/mp4';
+                        const blob = new Blob(chunks, { type: mime });
+                        const blobUrl = window.URL.createObjectURL(blob);
+                        
+                        const tempLink = document.createElement('a');
+                        tempLink.style.display = 'none';
+                        tempLink.href = blobUrl;
+                        tempLink.download = fileName;
+                        document.body.appendChild(tempLink);
+                        tempLink.click();
+                        
+                        setTimeout(() => {
+                            document.body.removeChild(tempLink);
+                            window.URL.revokeObjectURL(blobUrl);
+                        }, 2000);
 
-                    success = true;
-                    downloadBtnLabel.innerHTML = isAudio ? `✓ Saved MP3 Audio!` : `✓ Saved to Downloads!`;
-                    updateIslandState('success', 'Saved to Device', `${ext.toUpperCase()} saved successfully`);
-                    break;
+                        downloadSuccess = true;
+                        downloadBtnLabel.innerHTML = isAudio ? `✓ Saved MP3 Audio!` : `✓ Saved to Downloads!`;
+                        updateIslandState('success', 'Saved to Device', `${ext.toUpperCase()} saved successfully`);
+                    }
                 }
-            } catch (err) {
-                console.warn('Blob fetch failed, falling back...');
             }
+        } catch (fetchErr) {
+            console.warn('Direct stream fetch fallback:', fetchErr);
         }
 
-        if (!success) {
-            downloadBtnLabel.innerHTML = `Opening direct media...`;
-            window.open(item.url, '_blank');
-            updateIslandState('active', 'Media Opened', 'Tap & hold to save file');
+        // Fallback: Trigger native browser / Android DownloadManager directly via window/iframe
+        if (!downloadSuccess) {
+            downloadBtnLabel.textContent = "Starting Native Download...";
+            const directLink = document.createElement('a');
+            directLink.href = downloadApiUrl;
+            directLink.setAttribute('download', fileName);
+            directLink.setAttribute('target', '_blank');
+            document.body.appendChild(directLink);
+            directLink.click();
+            setTimeout(() => document.body.removeChild(directLink), 1500);
+
+            updateIslandState('active', 'Downloading Media', 'Check device notifications / downloads');
+            downloadBtnLabel.innerHTML = `✓ Download Triggered!`;
         }
 
         setTimeout(() => {

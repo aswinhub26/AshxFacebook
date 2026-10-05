@@ -21,7 +21,7 @@ import androidx.appcompat.app.AppCompatActivity;
 public class MainActivity extends AppCompatActivity {
 
     private WebView webView;
-    private static final String APP_URL = "http://10.0.2.2:5000"; // Local backend emulator default or replace with hosted URL
+    private static final String APP_URL = "https://ashxfacebook.onrender.com";
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
