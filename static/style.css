@@ -127,6 +127,19 @@ body {
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.4);
 }
 
+/* Platform Tabs */
+.platform-tab {
+    transition: all 0.25s var(--spring-ios);
+    border: 1px solid transparent;
+}
+
+.platform-tab.active-platform-tab {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.06) 100%);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.22);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.35);
+}
+
 /* Dynamic Island */
 .luxury-island {
     background: rgba(8, 8, 12, 0.75);

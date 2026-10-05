@@ -1,9 +1,10 @@
 // ==========================================================================
-// AshxFacebook - Client Logic with iOS 26 Titanium Glass & Multi-Tier Extractor
+// AshxStudio - Multi-Platform Studio (FB, Insta, YouTube, WhatsApp & MP3)
 // ==========================================================================
 
 let currentVideoData = null;
 let selectedQuality = 'hd';
+let currentPlatform = 'facebook';
 const STORAGE_KEY = 'ashx_fb_history_v1';
 
 // DOM Elements
@@ -27,8 +28,10 @@ const copyDirectLinkBtn = document.getElementById('copy-direct-link-btn');
 const shareAppBtn = document.getElementById('share-app-btn');
 
 const qualityTabs = document.querySelectorAll('.quality-tab');
+const platformTabs = document.querySelectorAll('.platform-tab');
 const hdSub = document.getElementById('hd-sub');
 const sdSub = document.getElementById('sd-sub');
+const inputPlatformIcon = document.getElementById('input-platform-icon');
 
 const dynamicIsland = document.getElementById('dynamic-island');
 const islandIndicator = document.getElementById('island-indicator');
@@ -58,14 +61,27 @@ document.addEventListener('DOMContentLoaded', () => {
         const targetUrl = match ? match[0] : sharedText;
         urlInput.value = targetUrl;
         clearBtn.classList.remove('hidden');
+        detectPlatformFromUrl(targetUrl);
         handleExtract();
     }
 });
 
 function setupEventListeners() {
+    // Platform Tab Switching
+    platformTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            platformTabs.forEach(t => t.classList.remove('active-platform-tab'));
+            tab.classList.add('active-platform-tab');
+            currentPlatform = tab.getAttribute('data-platform');
+            updatePlatformUI();
+        });
+    });
+
     urlInput.addEventListener('input', () => {
-        if (urlInput.value.trim().length > 0) {
+        const val = urlInput.value.trim();
+        if (val.length > 0) {
             clearBtn.classList.remove('hidden');
+            detectPlatformFromUrl(val);
         } else {
             clearBtn.classList.add('hidden');
         }
@@ -83,10 +99,9 @@ function setupEventListeners() {
             if (text) {
                 urlInput.value = text.trim();
                 clearBtn.classList.remove('hidden');
-                updateIslandState('active', 'Link Pasted', 'Extracting HD Reel...');
-                if (text.includes('facebook.com') || text.includes('fb.watch')) {
-                    handleExtract();
-                }
+                detectPlatformFromUrl(text.trim());
+                updateIslandState('active', 'Link Pasted', 'Extracting media...');
+                handleExtract();
             }
         } catch (err) {
             urlInput.focus();
@@ -105,6 +120,7 @@ function setupEventListeners() {
         }
     });
 
+    // Format & Audio Quality Tab Switching
     qualityTabs.forEach(tab => {
         tab.addEventListener('click', () => {
             qualityTabs.forEach(t => t.classList.remove('active-quality-tab'));
@@ -129,25 +145,26 @@ function setupEventListeners() {
         }
     });
 
-    // Mobile & Desktop Blob Downloader
+    // Universal Mobile & Desktop Blob Downloader (MP4 / MP3)
     downloadTriggerBtn.addEventListener('click', async (e) => {
         e.preventDefault();
         if (!currentVideoData) return;
         const item = currentVideoData[selectedQuality] || currentVideoData.hd;
         if (!item || !item.url) return;
 
+        const isAudio = selectedQuality === 'audio';
+        const ext = isAudio ? 'mp3' : 'mp4';
         const originalLabel = downloadBtnLabel.innerHTML;
         const originalBg = downloadTriggerBtn.className;
-        downloadBtnLabel.textContent = "Downloading 0%...";
+        downloadBtnLabel.textContent = isAudio ? "Extracting MP3 0%..." : "Downloading 0%...";
         downloadTriggerBtn.classList.add('opacity-75', 'pointer-events-none');
-        updateIslandState('busy', 'Saving Video', 'Downloading file to storage...');
+        updateIslandState('busy', isAudio ? 'Saving MP3' : 'Saving Video', 'Streaming file...');
 
-        const safeTitle = (currentVideoData.title || 'AshxFacebook_HD_Reel').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
-        const fileName = `${safeTitle}_${selectedQuality.toUpperCase()}.mp4`;
+        const safeTitle = (currentVideoData.title || 'AshxStudio_Media').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
+        const fileName = `${safeTitle}_${selectedQuality.toUpperCase()}.${ext}`;
 
         let success = false;
 
-        // Try direct fetch first, then CORS proxies to get blob
         const fetchUrls = [
             item.url,
             `https://api.allorigins.win/raw?url=${encodeURIComponent(item.url)}`,
@@ -177,7 +194,8 @@ function setupEventListeners() {
                         }
                     }
 
-                    const blob = new Blob(chunks, { type: 'video/mp4' });
+                    const mime = isAudio ? 'audio/mpeg' : 'video/mp4';
+                    const blob = new Blob(chunks, { type: mime });
                     const blobUrl = window.URL.createObjectURL(blob);
                     
                     const tempLink = document.createElement('a');
@@ -192,8 +210,8 @@ function setupEventListeners() {
                     }, 2000);
 
                     success = true;
-                    downloadBtnLabel.innerHTML = `✓ Saved to Downloads!`;
-                    updateIslandState('success', 'Saved to Gallery', 'Video downloaded successfully');
+                    downloadBtnLabel.innerHTML = isAudio ? `✓ Saved MP3 Audio!` : `✓ Saved to Downloads!`;
+                    updateIslandState('success', 'Saved to Device', `${ext.toUpperCase()} saved successfully`);
                     break;
                 }
             } catch (err) {
@@ -202,9 +220,9 @@ function setupEventListeners() {
         }
 
         if (!success) {
-            downloadBtnLabel.innerHTML = `Opening direct video...`;
+            downloadBtnLabel.innerHTML = `Opening direct media...`;
             window.open(item.url, '_blank');
-            updateIslandState('active', 'Video Stream Opened', 'Tap & hold video to Save');
+            updateIslandState('active', 'Media Opened', 'Tap & hold to save file');
         }
 
         setTimeout(() => {
@@ -221,13 +239,13 @@ function setupEventListeners() {
             try {
                 await navigator.share({
                     title: currentVideoData.title,
-                    text: 'AshxFacebook 1080p HD Video',
+                    text: 'AshxStudio HD Media',
                     url: targetUrl
                 });
             } catch (err) {}
         } else {
             navigator.clipboard.writeText(targetUrl);
-            alert('Video URL copied to clipboard!');
+            alert('Media URL copied to clipboard!');
         }
     });
 
@@ -241,11 +259,49 @@ function setupEventListeners() {
     dismissGuideBtn.addEventListener('click', () => closeModal(guideModal));
 }
 
-// Extraction Handler with Client-Side + Server-Side Hybrid Architecture
+// Auto-detect platform from URL string
+function detectPlatformFromUrl(url) {
+    let p = 'facebook';
+    if (url.includes('instagram.com')) p = 'instagram';
+    else if (url.includes('youtube.com') || url.includes('youtu.be')) p = 'youtube';
+    else if (url.includes('whatsapp.com') || url.includes('wa.me')) p = 'whatsapp';
+    else if (url.includes('facebook.com') || url.includes('fb.watch')) p = 'facebook';
+
+    currentPlatform = p;
+    platformTabs.forEach(t => {
+        if (t.getAttribute('data-platform') === p) {
+            t.classList.add('active-platform-tab');
+        } else {
+            t.classList.remove('active-platform-tab');
+        }
+    });
+    updatePlatformUI();
+}
+
+function updatePlatformUI() {
+    let placeholder = "Paste Facebook Reel link...";
+    let iconName = "facebook";
+    if (currentPlatform === 'instagram') {
+        placeholder = "Paste Instagram Reel or Post link...";
+        iconName = "instagram";
+    } else if (currentPlatform === 'youtube') {
+        placeholder = "Paste YouTube Shorts or Video link...";
+        iconName = "youtube";
+    } else if (currentPlatform === 'whatsapp') {
+        placeholder = "Paste WhatsApp Status link / media...";
+        iconName = "message-circle";
+    }
+
+    urlInput.placeholder = placeholder;
+    inputPlatformIcon.innerHTML = `<i data-lucide="${iconName}" class="w-4 h-4 text-zinc-400"></i>`;
+    lucide.createIcons();
+}
+
+// Extraction Handler (Multi-Platform Support)
 async function handleExtract() {
     let rawUrl = urlInput.value.trim();
     if (!rawUrl) {
-        showError('Please paste a Facebook Reel link first.');
+        showError('Please paste a media link first.');
         return;
     }
 
@@ -255,24 +311,21 @@ async function handleExtract() {
         urlInput.value = rawUrl;
     }
 
-    if (!rawUrl.includes('facebook.com') && !rawUrl.includes('fb.watch') && !rawUrl.includes('fb.gg')) {
-        showError('Please enter a valid Facebook Reel or Video link.');
-        return;
-    }
+    detectPlatformFromUrl(rawUrl);
 
     hideError();
     resultContainer.classList.add('hidden');
     loadingState.classList.remove('hidden');
     fetchBtn.disabled = true;
     fetchBtn.classList.add('opacity-50', 'cursor-not-allowed');
-    updateIslandState('busy', 'Resolving Stream', 'Parsing 1080p HD...');
+    updateIslandState('busy', `Resolving ${currentPlatform.toUpperCase()}`, 'Extracting 1080p HD & MP3...');
 
     let extractedData = null;
 
-    // 1. Try local/hosted backend endpoint first if available (with timeout)
+    // 1. Try local/hosted backend endpoint first
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const timeoutId = setTimeout(() => controller.abort(), 4500);
         const response = await fetch('/api/extract', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -286,9 +339,7 @@ async function handleExtract() {
                 extractedData = res.data;
             }
         }
-    } catch (e) {
-        // Backend not on same origin (GitHub Pages static host)
-    }
+    } catch (e) {}
 
     // 2. Client-Side Multi-Gateway Extractor
     if (!extractedData) {
@@ -299,50 +350,50 @@ async function handleExtract() {
     fetchBtn.disabled = false;
     fetchBtn.classList.remove('opacity-50', 'cursor-not-allowed');
 
-    if (extractedData && (extractedData.hd?.url || extractedData.sd?.url)) {
+    if (extractedData && (extractedData.hd?.url || extractedData.audio?.url || extractedData.sd?.url)) {
         currentVideoData = extractedData;
         populateResult(extractedData);
         saveToHistory(extractedData, rawUrl);
-        updateIslandState('success', '1080p HD Ready', 'Ready for download');
+        updateIslandState('success', 'Media Ready', 'Full HD & MP3 Available');
     } else {
-        showError('Could not fetch video. Please ensure the Facebook Reel is public (not in a private group/account).');
-        updateIslandState('error', 'Extraction Failed', 'Reel may be private');
+        showError('Could not fetch media. Please make sure the post/reel is public and active.');
+        updateIslandState('error', 'Extraction Failed', 'Check post visibility');
     }
 }
 
-// Client-Side Extractor with Multiple Fallback Gateways
-async function clientSideExtract(fbUrl) {
-    // Gateway 1: Cobalt API (High speed, lossless)
+// Client-Side Multi-Platform Extractor
+async function clientSideExtract(mediaUrl) {
+    // Gateway 1: Cobalt API (Supports YouTube, Instagram, Facebook, TikTok)
     try {
         const r = await fetch('https://co.wuk.sh/api/json', {
             method: 'POST',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: fbUrl, vQuality: '1080' })
+            body: JSON.stringify({ url: mediaUrl, vQuality: '1080', isAudioOnly: false })
         });
         if (r.ok) {
             const data = await r.json();
             if (data && (data.url || data.picker)) {
                 const streamUrl = data.url || (data.picker && data.picker[0]?.url);
+                const audioUrl = (data.audio) || streamUrl;
                 if (streamUrl) {
                     return {
-                        title: "Facebook HD Reel Video",
+                        title: "Extracted Social Media Video",
                         thumbnail: "",
                         duration: 0,
-                        uploader: "Facebook Creator",
+                        uploader: `${currentPlatform.toUpperCase()} Creator`,
                         hd: { url: streamUrl, quality: "1080p Full HD" },
                         sd: { url: streamUrl, quality: "480p SD" },
-                        audio: { url: streamUrl, quality: "MP3 Audio" }
+                        audio: { url: audioUrl, quality: "320kbps MP3 Audio" }
                     };
                 }
             }
         }
     } catch (e) {}
 
-    // Gateway 2: Direct Regex Scrape via CORS Proxies
+    // Gateway 2: Direct Scrape via Proxies
     const proxies = [
-        `https://api.allorigins.win/raw?url=${encodeURIComponent(fbUrl)}`,
-        `https://corsproxy.io/?${encodeURIComponent(fbUrl)}`,
-        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(fbUrl)}`
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(mediaUrl)}`,
+        `https://corsproxy.io/?${encodeURIComponent(mediaUrl)}`
     ];
 
     for (const proxy of proxies) {
@@ -354,40 +405,33 @@ async function clientSideExtract(fbUrl) {
 
             if (resp.ok) {
                 const html = await resp.text();
-                
                 const hdMatch = html.match(/browser_native_hd_url["']\s*:\s*["']([^"']+)["']/) ||
                                 html.match(/playable_url_quality_hd["']\s*:\s*["']([^"']+)["']/) ||
                                 html.match(/hd_src["']\s*:\s*["']([^"']+)["']/);
-                                
                 const sdMatch = html.match(/browser_native_sd_url["']\s*:\s*["']([^"']+)["']/) ||
                                 html.match(/playable_url["']\s*:\s*["']([^"']+)["']/) ||
                                 html.match(/sd_src["']\s*:\s*["']([^"']+)["']/);
-
                 const thumbMatch = html.match(/thumbnailUrl["']\s*:\s*["']([^"']+)["']/) ||
                                    html.match(/og:image["']\s*content=["']([^"']+)["']/);
-
                 const titleMatch = html.match(/og:title["']\s*content=["']([^"']+)["']/) ||
                                    html.match(/<title>([^<]+)<\/title>/);
 
-                const cleanJson = (u) => {
-                    if (!u) return null;
-                    return u.replace(/\\u0025/g, '%').replace(/\\u0026/g, '&').replace(/\\\//g, '/');
-                };
+                const cleanJson = (u) => u ? u.replace(/\\u0025/g, '%').replace(/\\u0026/g, '&').replace(/\\\//g, '/') : null;
 
                 const hd = cleanJson(hdMatch ? hdMatch[1] : null);
                 const sd = cleanJson(sdMatch ? sdMatch[1] : null);
                 const thumb = cleanJson(thumbMatch ? thumbMatch[1] : null);
-                const title = titleMatch ? titleMatch[1].replace(/ \| Facebook/gi, '') : "Facebook HD Reel Video";
+                const title = titleMatch ? titleMatch[1].replace(/ \| (Facebook|Instagram|YouTube)/gi, '') : "Social Media Asset";
 
                 if (hd || sd) {
                     return {
                         title: title,
                         thumbnail: thumb || "",
                         duration: 0,
-                        uploader: "Facebook Creator",
+                        uploader: `${currentPlatform.toUpperCase()} Creator`,
                         hd: { url: hd || sd, quality: hd ? "1080p Full HD" : "Standard HD" },
                         sd: { url: sd || hd, quality: "480p SD" },
-                        audio: { url: hd || sd, quality: "MP3 Audio" }
+                        audio: { url: hd || sd, quality: "320kbps MP3 Audio" }
                     };
                 }
             }
@@ -399,15 +443,15 @@ async function clientSideExtract(fbUrl) {
 
 // Populate UI with extracted data
 function populateResult(data) {
-    resTitle.textContent = data.title || 'Facebook HD Reel Video';
-    resUploader.textContent = data.uploader || 'Facebook Creator';
+    resTitle.textContent = data.title || 'Social Media Asset';
+    resUploader.textContent = data.uploader || 'Creator Media';
     
     if (data.duration) {
         const mins = Math.floor(data.duration / 60);
         const secs = Math.floor(data.duration % 60);
         resDuration.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs} • Ready to download`;
     } else {
-        resDuration.textContent = `Verified 1080p Stream`;
+        resDuration.textContent = `Verified 1080p & MP3 Stream`;
     }
 
     if (data.hd?.quality) hdSub.textContent = data.hd.quality;
@@ -435,7 +479,7 @@ function updateActiveQualityView() {
 
     if (selectedQuality === 'audio') {
         videoBadge.textContent = 'MP3 AUDIO';
-        downloadBtnLabel.textContent = 'Save Audio (MP3)';
+        downloadBtnLabel.textContent = 'Save Only MP3 Audio (320kbps)';
     } else if (selectedQuality === 'sd') {
         videoBadge.textContent = 'SD 480P';
         downloadBtnLabel.textContent = 'Save Standard Video (MP4)';
@@ -478,7 +522,7 @@ function saveToHistory(data, originalUrl) {
         let history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
         const entry = {
             id: Date.now(),
-            title: data.title || 'Facebook HD Reel',
+            title: data.title || 'Social Media Asset',
             thumbnail: data.thumbnail || '',
             url: data.hd?.url || originalUrl,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })

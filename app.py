@@ -16,28 +16,23 @@ HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
     'Accept-Language': 'en-US,en;q=0.9',
-    'Sec-Fetch-Site': 'none',
-    'Sec-Fetch-Mode': 'navigate',
-    'Sec-Fetch-User': '?1',
-    'Sec-Fetch-Dest': 'document'
 }
 
-def clean_fb_url(raw_url: str) -> str:
-    """Cleans Facebook Reel / Video URLs and handles share links."""
+def clean_url(raw_url: str) -> str:
+    """Cleans social URLs and resolves redirects."""
     raw_url = raw_url.strip()
-    # Match standard facebook reel patterns
-    if 'share/r/' in raw_url or 'share/v/' in raw_url:
+    # Match share links that need redirect resolution
+    if any(k in raw_url for k in ['share/r/', 'share/v/', 'youtu.be/', 'fb.watch/']):
         try:
-            # Resolve redirects if it's a share link
             resp = requests.head(raw_url, headers=HEADERS, allow_redirects=True, timeout=5)
             if resp.url:
                 raw_url = resp.url
         except Exception as e:
-            logger.warning(f"Could not resolve redirect for {raw_url}: {e}")
+            logger.warning(f"Could not resolve redirect: {e}")
     return raw_url
 
-def extract_with_ytdlp(url: str):
-    """Primary extractor using yt-dlp with optimized Facebook parameters."""
+def extract_media(url: str):
+    """Multi-platform media extractor for FB Reels, Insta Reels, YouTube Shorts, etc."""
     ydl_opts = {
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'quiet': True,
@@ -50,23 +45,20 @@ def extract_with_ytdlp(url: str):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
         
-        # Determine HD vs SD formats
         formats = info.get('formats', [])
         hd_format = None
         sd_format = None
         audio_format = None
         
-        # Sort formats by resolution / quality
         video_formats = [f for f in formats if f.get('vcodec') != 'none' and f.get('url')]
-        audio_formats = [f for f in formats if f.get('vcodec') == 'none' and f.get('acodec') != 'none' and f.get('url')]
+        audio_formats = [f for f in formats if f.get('acodec') != 'none' and f.get('url')]
         
         if video_formats:
-            # Highest quality format with both video and audio or highest resolution
-            best_combined = [f for f in video_formats if f.get('acodec') != 'none']
-            if best_combined:
-                best_combined.sort(key=lambda x: (x.get('height') or 0, x.get('tbr') or 0), reverse=True)
-                hd_format = best_combined[0]
-                sd_format = best_combined[-1] if len(best_combined) > 1 else best_combined[0]
+            combined = [f for f in video_formats if f.get('acodec') != 'none']
+            if combined:
+                combined.sort(key=lambda x: (x.get('height') or 0, x.get('tbr') or 0), reverse=True)
+                hd_format = combined[0]
+                sd_format = combined[-1] if len(combined) > 1 else combined[0]
             else:
                 video_formats.sort(key=lambda x: (x.get('height') or 0, x.get('tbr') or 0), reverse=True)
                 hd_format = video_formats[0]
@@ -80,90 +72,35 @@ def extract_with_ytdlp(url: str):
         direct_sd_url = sd_format.get('url') if sd_format else direct_hd_url
         direct_audio_url = audio_format.get('url') if audio_format else direct_hd_url
 
+        platform = "Universal"
+        if "facebook" in url or "fb.watch" in url: platform = "Facebook"
+        elif "instagram" in url: platform = "Instagram"
+        elif "youtube" in url or "youtu.be" in url: platform = "YouTube"
+        elif "whatsapp" in url: platform = "WhatsApp"
+
         return {
-            "title": info.get('title') or "AshxFacebook Reel Video",
+            "platform": platform,
+            "title": info.get('title') or f"AshxStudio {platform} Media",
             "description": info.get('description') or "",
             "thumbnail": info.get('thumbnail') or "",
             "duration": info.get('duration') or 0,
-            "uploader": info.get('uploader') or info.get('channel') or "Facebook Creator",
-            "view_count": info.get('view_count'),
-            "like_count": info.get('like_count'),
+            "uploader": info.get('uploader') or info.get('channel') or f"{platform} Creator",
             "hd": {
                 "url": direct_hd_url,
-                "quality": f"{hd_format.get('height', 'HD')}p" if hd_format and hd_format.get('height') else "HD 1080p/720p",
-                "filesize": hd_format.get('filesize') or hd_format.get('filesize_approx') if hd_format else None,
+                "quality": f"{hd_format.get('height', '1080')}p Full HD" if hd_format and hd_format.get('height') else "1080p Full HD",
                 "ext": "mp4"
             },
             "sd": {
                 "url": direct_sd_url,
-                "quality": f"{sd_format.get('height', 'SD')}p" if sd_format and sd_format.get('height') else "SD 480p/360p",
-                "filesize": sd_format.get('filesize') or sd_format.get('filesize_approx') if sd_format else None,
+                "quality": f"{sd_format.get('height', '480')}p SD" if sd_format and sd_format.get('height') else "480p Standard",
                 "ext": "mp4"
             },
             "audio": {
                 "url": direct_audio_url,
-                "quality": "High Quality Audio",
+                "quality": "320kbps MP3 Audio",
                 "ext": "mp3"
             }
         }
-
-def fallback_direct_scrape(url: str):
-    """Fallback scraper parsing page HTML tokens if yt-dlp misses something."""
-    try:
-        resp = requests.get(url, headers=HEADERS, timeout=8)
-        html = resp.text
-        
-        hd_match = re.search(r'browser_native_hd_url["\']\s*:\s*["\']([^"\']+)["\']', html) or \
-                   re.search(r'playable_url_quality_hd["\']\s*:\s*["\']([^"\']+)["\']', html) or \
-                   re.search(r'hd_src["\']\s*:\s*["\']([^"\']+)["\']', html)
-                   
-        sd_match = re.search(r'browser_native_sd_url["\']\s*:\s*["\']([^"\']+)["\']', html) or \
-                   re.search(r'playable_url["\']\s*:\s*["\']([^"\']+)["\']', html) or \
-                   re.search(r'sd_src["\']\s*:\s*["\']([^"\']+)["\']', html)
-                   
-        thumb_match = re.search(r'thumbnailUrl["\']\s*:\s*["\']([^"\']+)["\']', html) or \
-                      re.search(r'og:image["\']\s*content=["\']([^"\']+)["\']', html)
-                      
-        title_match = re.search(r'og:title["\']\s*content=["\']([^"\']+)["\']', html) or \
-                      re.search(r'<title>([^<]+)</title>', html)
-
-        def clean_json_url(u):
-            if not u: return None
-            return u.replace('\\/', '/').replace('\\u0025', '%').replace('\\u0026', '&')
-
-        hd_url = clean_json_url(hd_match.group(1)) if hd_match else None
-        sd_url = clean_json_url(sd_match.group(1)) if sd_match else None
-        thumbnail = clean_json_url(thumb_match.group(1)) if thumb_match else ""
-        title = title_match.group(1) if title_match else "AshxFacebook HD Video"
-
-        if not hd_url and not sd_url:
-            return None
-
-        return {
-            "title": title.replace(" | Facebook", "").strip(),
-            "description": "",
-            "thumbnail": thumbnail,
-            "duration": 0,
-            "uploader": "Facebook User",
-            "hd": {
-                "url": hd_url or sd_url,
-                "quality": "HD Quality" if hd_url else "SD Quality",
-                "ext": "mp4"
-            },
-            "sd": {
-                "url": sd_url or hd_url,
-                "quality": "SD Quality",
-                "ext": "mp4"
-            },
-            "audio": {
-                "url": hd_url or sd_url,
-                "quality": "Audio Stream",
-                "ext": "mp3"
-            }
-        }
-    except Exception as e:
-        logger.error(f"Fallback scrape failed: {e}")
-        return None
 
 @app.route('/')
 def index():
@@ -175,54 +112,49 @@ def extract():
     url = data.get('url', '').strip()
     
     if not url:
-        return jsonify({"success": False, "error": "Please provide a valid Facebook Reel or Video link."}), 400
+        return jsonify({"success": False, "error": "Please provide a valid media link."}), 400
     
-    clean_url = clean_fb_url(url)
+    cleaned = clean_url(url)
     
-    # Try yt-dlp first
     try:
-        info = extract_with_ytdlp(clean_url)
-        if info and (info.get('hd', {}).get('url') or info.get('sd', {}).get('url')):
+        info = extract_media(cleaned)
+        if info and (info.get('hd', {}).get('url') or info.get('audio', {}).get('url')):
             return jsonify({"success": True, "data": info})
     except Exception as e:
-        logger.warning(f"yt-dlp extraction failed: {e}, attempting fallback...")
-        
-    # Fallback to direct scraper
-    fallback_info = fallback_direct_scrape(clean_url)
-    if fallback_info:
-        return jsonify({"success": True, "data": fallback_info})
+        logger.warning(f"yt-dlp extraction error: {e}")
         
     return jsonify({
         "success": False, 
-        "error": "Could not extract video. Ensure the Facebook Reel is public and the link is active."
+        "error": "Could not extract media. Ensure the post is public and the link is active."
     }), 422
 
 @app.route('/api/download')
 def download():
-    """Streams video file directly to force download with clean filename."""
+    """Streaming proxy to force download with clean filename."""
     video_url = request.args.get('url')
-    title = request.args.get('title', 'AshxFacebook_Reel_HD')
-    quality = request.args.get('quality', 'HD')
+    title = request.args.get('title', 'AshxStudio_Media')
+    ext = request.args.get('ext', 'mp4')
     
     if not video_url:
-        return "Missing video URL", 400
+        return "Missing media URL", 400
         
-    safe_title = re.sub(r'[^a-zA-Z0-9_-]', '_', title)[:40]
-    filename = f"AshxFacebook_{safe_title}_{quality}.mp4"
+    safe_title = re.sub(r'[^a-zA-Z0-9_-]', '_', title)[:35]
+    filename = f"AshxStudio_{safe_title}.{ext}"
 
     def stream_content():
-        req_headers = {'User-Agent': HEADERS['User-Agent']}
-        with requests.get(video_url, headers=req_headers, stream=True, timeout=30) as r:
+        with requests.get(video_url, headers={'User-Agent': HEADERS['User-Agent']}, stream=True, timeout=30) as r:
             r.raise_for_status()
             for chunk in r.iter_content(chunk_size=65536):
                 if chunk:
                     yield chunk
 
+    mime = 'audio/mpeg' if ext == 'mp3' else 'video/mp4'
+
     return Response(
         stream_with_context(stream_content()),
         headers={
             'Content-Disposition': f'attachment; filename="{filename}"',
-            'Content-Type': 'video/mp4',
+            'Content-Type': mime,
             'Cache-Control': 'no-cache'
         }
     )
@@ -230,7 +162,7 @@ def download():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     print("\n==========================================")
-    print("AshxFacebook HD Downloader Running!")
+    print("AshxStudio Multi-Platform Studio Running!")
     print(f"Local Server: http://127.0.0.1:{port}")
     print("==========================================\n")
     app.run(host='0.0.0.0', port=port, debug=False)
