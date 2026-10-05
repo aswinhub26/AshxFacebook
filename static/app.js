@@ -389,8 +389,12 @@ async function handleExtract() {
         saveToHistory(extractedData, rawUrl);
         updateIslandState('success', 'Media Ready', 'Full HD & MP3 Available');
     } else {
-        showError('Could not fetch media. Please make sure the post/reel is public and active.');
-        updateIslandState('error', 'Extraction Failed', 'Check post visibility');
+        let msg = 'Could not extract media. Ensure the Reel/Post is public (not restricted or in a private account).';
+        if (currentPlatform === 'instagram') {
+            msg = 'Instagram blocked access to this reel. If this reel is age-restricted or private, Instagram requires a login. Public Instagram & Facebook reels work without login.';
+        }
+        showError(msg);
+        updateIslandState('error', 'Extraction Failed', 'Reel may be private or restricted');
     }
 }
 
