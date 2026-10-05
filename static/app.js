@@ -137,10 +137,14 @@ function setupEventListeners() {
             navigator.clipboard.writeText(targetUrl);
             const original = copyDirectLinkBtn.innerHTML;
             copyDirectLinkBtn.innerHTML = `<i data-lucide="check" class="w-3 h-3 text-emerald-400"></i><span class="text-emerald-300">Copied</span>`;
-            lucide.createIcons();
+            if (window.lucide && typeof lucide.createIcons === 'function') {
+        lucide.createIcons();
+    }
             setTimeout(() => {
                 copyDirectLinkBtn.innerHTML = original;
-                lucide.createIcons();
+                if (window.lucide && typeof lucide.createIcons === 'function') {
+        lucide.createIcons();
+    }
             }, 2000);
         }
     });
@@ -294,7 +298,9 @@ function updatePlatformUI() {
 
     urlInput.placeholder = placeholder;
     inputPlatformIcon.innerHTML = `<i data-lucide="${iconName}" class="w-4 h-4 text-zinc-400"></i>`;
-    lucide.createIcons();
+    if (window.lucide && typeof lucide.createIcons === 'function') {
+        lucide.createIcons();
+    }
 }
 
 // Extraction Handler (Multi-Platform Support)

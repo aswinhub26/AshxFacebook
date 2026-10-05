@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Ashx Studio • Multi-Platform HD Media & Audio Studio</title>
     <!-- PWA & Mobile Web App -->
-    <link rel="manifest" href="/static/manifest.json">
+    <link rel="manifest" href="./static/manifest.json">
     <meta name="theme-color" content="#07070A">
     <meta name="description" content="All-in-one studio for Instagram Reels, Facebook Videos, YouTube Shorts, WhatsApp Status and MP3 Audio extraction.">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -42,7 +42,7 @@
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- Titanium iOS 26 Glass CSS -->
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="./static/style.css">
 </head>
 <body class="min-h-screen overflow-x-hidden selection:bg-white/20 font-sans relative flex flex-col justify-between noise-overlay">
 
@@ -332,9 +332,17 @@
     </footer>
 
     <!-- Scripts -->
-    <script src="/static/app.js"></script>
+    <script src="./static/app.js"></script>
     <script>
         lucide.createIcons();
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then((reg) => console.log('SW Registered: ', reg.scope))
+                    .catch((err) => console.log('SW failed: ', err));
+            });
+        }
 
         const card = document.getElementById('card-container');
         if (card) {
