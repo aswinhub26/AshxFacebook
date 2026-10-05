@@ -284,23 +284,21 @@ function detectPlatformFromUrl(url) {
 
 function updatePlatformUI() {
     let placeholder = "Paste Facebook Reel link...";
-    let iconName = "facebook";
+    let iconSvg = `<svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="12" fill="#1877F2"/><path d="M14.5 12.5H12.7V19H10V12.5H8.7V10.2H10V8.7C10 7.3 10.7 6 12.8 6C13.8 6 14.5 6.1 14.5 6.1V8.3H13.6C12.9 8.3 12.7 8.7 12.7 9.3V10.2H14.7L14.5 12.5Z" fill="white"/></svg>`;
+    
     if (currentPlatform === 'instagram') {
         placeholder = "Paste Instagram Reel or Post link...";
-        iconName = "instagram";
+        iconSvg = `<svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6.5" fill="url(#ig-grad-icon)"/><rect x="5.5" y="5.5" width="13" height="13" rx="3.5" stroke="white" stroke-width="1.6"/><circle cx="12" cy="12" r="3.2" stroke="white" stroke-width="1.6"/><circle cx="15.8" cy="8.2" r="0.9" fill="white"/><defs><radialGradient id="ig-grad-icon" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(4.8 24) rotate(-55) scale(27)"><stop stop-color="#FFDD55"/><stop offset="0.25" stop-color="#FF5D3B"/><stop offset="0.5" stop-color="#FF0069"/><stop offset="0.75" stop-color="#D300C5"/><stop offset="1" stop-color="#7638FA"/></radialGradient></defs></svg>`;
     } else if (currentPlatform === 'youtube') {
         placeholder = "Paste YouTube Shorts or Video link...";
-        iconName = "youtube";
+        iconSvg = `<svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="#FF0000"/><path d="M10 8.5L15.5 12L10 15.5V8.5Z" fill="white"/></svg>`;
     } else if (currentPlatform === 'whatsapp') {
         placeholder = "Paste WhatsApp Status link / media...";
-        iconName = "message-circle";
+        iconSvg = `<svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="12" fill="#25D366"/><path d="M17.2 14.5C17 14.4 15.8 13.8 15.6 13.7C15.4 13.6 15.2 13.6 15.1 13.8C14.9 14.1 14.4 14.7 14.2 14.9C14.1 15.1 13.9 15.1 13.7 15C13.5 14.9 12.7 14.6 11.8 13.8C11.1 13.1 10.6 12.3 10.5 12.1C10.4 11.9 10.5 11.8 10.6 11.7C10.7 11.6 10.8 11.4 10.9 11.3C11 11.2 11.1 11.1 11.1 11C11.2 10.9 11.1 10.7 11.1 10.6C11 10.5 10.6 9.4 10.4 8.9C10.2 8.4 10 8.5 9.9 8.5H9.4C9.2 8.5 9 8.6 8.8 8.8C8.6 9 8 9.6 8 10.7C8 11.9 8.8 13 9 13.2C9.1 13.3 10.6 15.6 12.9 16.6C15.2 17.5 15.2 17.2 15.6 17.2C16 17.1 16.9 16.6 17.1 16.1C17.3 15.5 17.3 15 17.2 14.9C17.2 14.8 17.1 14.7 16.9 14.6L17.2 14.5Z" fill="white"/></svg>`;
     }
 
     urlInput.placeholder = placeholder;
-    inputPlatformIcon.innerHTML = `<i data-lucide="${iconName}" class="w-4 h-4 text-zinc-400"></i>`;
-    if (window.lucide && typeof lucide.createIcons === 'function') {
-        lucide.createIcons();
-    }
+    inputPlatformIcon.innerHTML = iconSvg;
 }
 
 // Extraction Handler (Multi-Platform Support)
