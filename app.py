@@ -4,7 +4,7 @@ import json
 import logging
 import urllib.parse
 import requests
-from flask import Flask, request, jsonify, render_template, Response, stream_with_context
+from flask import Flask, request, jsonify, render_template, Response, stream_with_context, send_from_directory
 try:
     from flask_cors import CORS
     has_cors = True
@@ -112,6 +112,14 @@ def extract_media(url: str):
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/sw.js')
+def serve_sw():
+    return send_from_directory('.', 'sw.js', mimetype='application/javascript')
+
+@app.route('/manifest.json')
+def serve_manifest():
+    return send_from_directory('static', 'manifest.json', mimetype='application/manifest+json')
 
 @app.after_request
 def add_header(response):
