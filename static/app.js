@@ -233,9 +233,21 @@ function setupEventListeners() {
 
 // Extraction Handler with Client-Side + Server-Side Hybrid Architecture
 async function handleExtract() {
-    const rawUrl = urlInput.value.trim();
+    let rawUrl = urlInput.value.trim();
     if (!rawUrl) {
-        showError('Please paste a Facebook Reel or Video URL first.');
+        showError('Please paste a Facebook Reel link first.');
+        return;
+    }
+
+    // Extract actual Facebook URL if full share text was pasted
+    const urlMatch = rawUrl.match(/https?:\/\/[^\s]+/i);
+    if (urlMatch) {
+        rawUrl = urlMatch[0];
+        urlInput.value = rawUrl;
+    }
+
+    if (!rawUrl.includes('facebook.com') && !rawUrl.includes('fb.watch') && !rawUrl.includes('fb.gg')) {
+        showError('Please enter a valid Facebook Reel or Video link.');
         return;
     }
 
@@ -248,13 +260,17 @@ async function handleExtract() {
 
     let extractedData = null;
 
-    // 1. Try local/hosted backend endpoint first if available
+    // 1. Try local/hosted backend endpoint first if available (with timeout)
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
         const response = await fetch('/api/extract', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: rawUrl })
+            body: JSON.stringify({ url: rawUrl }),
+            signal: controller.signal
         });
+        clearTimeout(timeoutId);
         if (response.ok) {
             const res = await response.json();
             if (res.success && res.data) {
@@ -262,10 +278,10 @@ async function handleExtract() {
             }
         }
     } catch (e) {
-        // Backend not on same origin (e.g. on GitHub Pages static)
+        // Backend not available (GitHub Pages static host)
     }
 
-    // 2. If static GitHub Pages, use client-side direct extractor
+    // 2. Client-Side Multi-Gateway Extractor
     if (!extractedData) {
         extractedData = await clientSideExtract(rawUrl);
     }
@@ -280,76 +296,96 @@ async function handleExtract() {
         saveToHistory(extractedData, rawUrl);
         updateIslandState('success', '1080p HD Ready', 'Ready for download');
     } else {
-        showError('Unable to extract HD stream. Ensure the Facebook Reel is public and active.');
+        showError('Could not fetch video. Please ensure the Facebook Reel is public (not in a private group/account).');
         updateIslandState('error', 'Extraction Failed', 'Reel may be private');
     }
 }
 
-// Client-Side Extractor for Pure GitHub Pages deployment
+// Client-Side Extractor with Multiple Fallback Gateways
 async function clientSideExtract(fbUrl) {
+    const cleanUrl = fbUrl.split('?')[0].replace(/\/+$/, '');
+
+    // Gateway 1: Cobalt API (High speed, lossless)
     try {
-        // Multiple fallback public API gateways
-        const endpoints = [
-            `https://api.v2.fdownloader.net/api/v1/facebook?url=${encodeURIComponent(fbUrl)}`,
-            `https://fbdown-api.onrender.com/api/get?url=${encodeURIComponent(fbUrl)}`,
-            `https://snapsave.io/api/ajaxSearch?q=${encodeURIComponent(fbUrl)}`
-        ];
-
-        for (const ep of endpoints) {
-            try {
-                const r = await fetch(ep, { headers: { 'Accept': 'application/json' } });
-                if (r.ok) {
-                    const data = await r.json();
-                    if (data && (data.hd || data.sd || data.video || data.data)) {
-                        const hdUrl = data.hd || data.video_hd || (data.data && data.data.hd) || data.url;
-                        const sdUrl = data.sd || data.video_sd || (data.data && data.data.sd) || hdUrl;
-                        if (hdUrl || sdUrl) {
-                            return {
-                                title: data.title || "Facebook HD Reel Video",
-                                thumbnail: data.thumbnail || data.thumb || "",
-                                duration: data.duration || 0,
-                                uploader: data.uploader || "Facebook Creator",
-                                hd: { url: hdUrl || sdUrl, quality: "1080p Full HD" },
-                                sd: { url: sdUrl || hdUrl, quality: "480p SD" },
-                                audio: { url: hdUrl || sdUrl, quality: "MP3 Audio" }
-                            };
-                        }
-                    }
+        const r = await fetch('https://co.wuk.sh/api/json', {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: fbUrl, vQuality: '1080' })
+        });
+        if (r.ok) {
+            const data = await r.json();
+            if (data && (data.url || data.picker)) {
+                const streamUrl = data.url || (data.picker && data.picker[0]?.url);
+                if (streamUrl) {
+                    return {
+                        title: "Facebook HD Reel Video",
+                        thumbnail: "",
+                        duration: 0,
+                        uploader: "Facebook Creator",
+                        hd: { url: streamUrl, quality: "1080p Full HD" },
+                        sd: { url: streamUrl, quality: "480p SD" },
+                        audio: { url: streamUrl, quality: "MP3 Audio" }
+                    };
                 }
-            } catch (err) {}
-        }
-
-        // Direct stream parser fallback
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(fbUrl)}`;
-        const htmlResp = await fetch(proxyUrl);
-        if (htmlResp.ok) {
-            const html = await htmlResp.text();
-            const hdMatch = html.match(/browser_native_hd_url["']\s*:\s*["']([^"']+)["']/) ||
-                            html.match(/playable_url_quality_hd["']\s*:\s*["']([^"']+)["']/);
-            const sdMatch = html.match(/browser_native_sd_url["']\s*:\s*["']([^"']+)["']/) ||
-                            html.match(/playable_url["']\s*:\s*["']([^"']+)["']/);
-            const thumbMatch = html.match(/thumbnailUrl["']\s*:\s*["']([^"']+)["']/) ||
-                               html.match(/og:image["']\s*content=["']([^"']+)["']/);
-
-            const clean = (u) => u ? u.replace(/\\u0025/g, '%').replace(/\\u0026/g, '&').replace(/\\\//g, '/') : null;
-
-            const hd = clean(hdMatch ? hdMatch[1] : null);
-            const sd = clean(sdMatch ? sdMatch[1] : null);
-            const thumb = clean(thumbMatch ? thumbMatch[1] : null);
-
-            if (hd || sd) {
-                return {
-                    title: "Facebook HD Reel Video",
-                    thumbnail: thumb || "",
-                    duration: 0,
-                    uploader: "Facebook Creator",
-                    hd: { url: hd || sd, quality: "1080p Full HD" },
-                    sd: { url: sd || hd, quality: "480p SD" },
-                    audio: { url: hd || sd, quality: "MP3 Audio" }
-                };
             }
         }
     } catch (e) {}
+
+    // Gateway 2: Direct Regex Scrape via CORS Proxies
+    const proxies = [
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(fbUrl)}`,
+        `https://corsproxy.io/?${encodeURIComponent(fbUrl)}`,
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(fbUrl)}`
+    ];
+
+    for (const proxy of proxies) {
+        try {
+            const controller = new AbortController();
+            const to = setTimeout(() => controller.abort(), 6000);
+            const resp = await fetch(proxy, { signal: controller.signal });
+            clearTimeout(to);
+
+            if (resp.ok) {
+                const html = await resp.text();
+                
+                const hdMatch = html.match(/browser_native_hd_url["']\s*:\s*["']([^"']+)["']/) ||
+                                html.match(/playable_url_quality_hd["']\s*:\s*["']([^"']+)["']/) ||
+                                html.match(/hd_src["']\s*:\s*["']([^"']+)["']/);
+                                
+                const sdMatch = html.match(/browser_native_sd_url["']\s*:\s*["']([^"']+)["']/) ||
+                                html.match(/playable_url["']\s*:\s*["']([^"']+)["']/) ||
+                                html.match(/sd_src["']\s*:\s*["']([^"']+)["']/);
+
+                const thumbMatch = html.match(/thumbnailUrl["']\s*:\s*["']([^"']+)["']/) ||
+                                   html.match(/og:image["']\s*content=["']([^"']+)["']/);
+
+                const titleMatch = html.match(/og:title["']\s*content=["']([^"']+)["']/) ||
+                                   html.match(/<title>([^<]+)<\/title>/);
+
+                const cleanJson = (u) => {
+                    if (!u) return null;
+                    return u.replace(/\\u0025/g, '%').replace(/\\u0026/g, '&').replace(/\\\//g, '/');
+                };
+
+                const hd = cleanJson(hdMatch ? hdMatch[1] : null);
+                const sd = cleanJson(sdMatch ? sdMatch[1] : null);
+                const thumb = cleanJson(thumbMatch ? thumbMatch[1] : null);
+                const title = titleMatch ? titleMatch[1].replace(/ \| Facebook/gi, '') : "Facebook HD Reel Video";
+
+                if (hd || sd) {
+                    return {
+                        title: title,
+                        thumbnail: thumb || "",
+                        duration: 0,
+                        uploader: "Facebook Creator",
+                        hd: { url: hd || sd, quality: hd ? "1080p Full HD" : "Standard HD" },
+                        sd: { url: sd || hd, quality: "480p SD" },
+                        audio: { url: hd || sd, quality: "MP3 Audio" }
+                    };
+                }
+            }
+        } catch (err) {}
+    }
 
     return null;
 }
