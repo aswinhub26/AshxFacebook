@@ -118,11 +118,90 @@ function setupEventListeners() {
             const original = copyDirectLinkBtn.innerHTML;
             copyDirectLinkBtn.innerHTML = `<i data-lucide="check" class="w-3 h-3 text-emerald-400"></i><span class="text-emerald-300">Copied</span>`;
             lucide.createIcons();
-            setTimeout(() => {
-                copyDirectLinkBtn.innerHTML = original;
-                lucide.createIcons();
-            }, 2000);
+    // Universal Mobile Direct Downloader (Fix for Mobile Chrome & Safari CORS download issue)
+    downloadTriggerBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (!currentVideoData) return;
+        const item = currentVideoData[selectedQuality] || currentVideoData.hd;
+        if (!item || !item.url) return;
+
+        const originalLabel = downloadBtnLabel.innerHTML;
+        const originalBg = downloadTriggerBtn.className;
+        downloadBtnLabel.textContent = "Downloading 0%...";
+        downloadTriggerBtn.classList.add('opacity-75', 'pointer-events-none');
+        updateIslandState('busy', 'Saving Video', 'Downloading file to storage...');
+
+        const safeTitle = (currentVideoData.title || 'AshxFacebook_HD_Reel').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
+        const fileName = `${safeTitle}_${selectedQuality.toUpperCase()}.mp4`;
+
+        let success = false;
+
+        // Try direct fetch first, then CORS proxies to get blob
+        const fetchUrls = [
+            item.url,
+            `https://api.allorigins.win/raw?url=${encodeURIComponent(item.url)}`,
+            `https://corsproxy.io/?${encodeURIComponent(item.url)}`
+        ];
+
+        for (const fUrl of fetchUrls) {
+            try {
+                const resp = await fetch(fUrl);
+                if (resp.ok) {
+                    const reader = resp.body.getReader();
+                    const contentLength = +resp.headers.get('Content-Length') || 0;
+                    let receivedLength = 0;
+                    let chunks = [];
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        chunks.push(value);
+                        receivedLength += value.length;
+                        if (contentLength > 0) {
+                            const percent = Math.round((receivedLength / contentLength) * 100);
+                            downloadBtnLabel.textContent = `Downloading ${percent}%...`;
+                        } else {
+                            const mb = (receivedLength / (1024 * 1024)).toFixed(1);
+                            downloadBtnLabel.textContent = `Downloading ${mb} MB...`;
+                        }
+                    }
+
+                    const blob = new Blob(chunks, { type: 'video/mp4' });
+                    const blobUrl = window.URL.createObjectURL(blob);
+                    
+                    const tempLink = document.createElement('a');
+                    tempLink.style.display = 'none';
+                    tempLink.href = blobUrl;
+                    tempLink.download = fileName;
+                    document.body.appendChild(tempLink);
+                    tempLink.click();
+                    setTimeout(() => {
+                        document.body.removeChild(tempLink);
+                        window.URL.revokeObjectURL(blobUrl);
+                    }, 2000);
+
+                    success = true;
+                    downloadBtnLabel.innerHTML = `✓ Saved to Downloads!`;
+                    updateIslandState('success', 'Saved to Gallery', 'Video downloaded successfully');
+                    break;
+                }
+            } catch (err) {
+                console.warn('Proxy attempt failed, trying next...');
+            }
         }
+
+        if (!success) {
+            // Fallback: Open direct stream with target _blank
+            downloadBtnLabel.innerHTML = `Opening direct video...`;
+            window.open(item.url, '_blank');
+            updateIslandState('active', 'Video Stream Opened', 'Tap & hold video to Save');
+        }
+
+        setTimeout(() => {
+            downloadBtnLabel.innerHTML = originalLabel;
+            downloadTriggerBtn.className = originalBg;
+            downloadTriggerBtn.classList.remove('opacity-75', 'pointer-events-none');
+        }, 3500);
     });
 
     shareAppBtn.addEventListener('click', async () => {
