@@ -328,24 +328,51 @@ async function handleExtract() {
 
     let extractedData = null;
 
-    // 1. Try local/hosted backend endpoint first
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4500);
-        const response = await fetch('/api/extract', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: rawUrl }),
-            signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        if (response.ok) {
-            const res = await response.json();
-            if (res.success && res.data) {
-                extractedData = res.data;
+    // 1. Try configured / hosted backend endpoints (supports Netlify -> Render / Railway / Local)
+    const backendEndpoints = [
+        '/api/extract',
+        'https://ashx-downloader-api.onrender.com/api/extract',
+        'https://fbdown-api.onrender.com/api/get?url=' + encodeURIComponent(rawUrl)
+    ];
+
+    for (const ep of backendEndpoints) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
+            
+            let response;
+            if (ep.includes('?url=')) {
+                response = await fetch(ep, { signal: controller.signal });
+            } else {
+                response = await fetch(ep, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: rawUrl }),
+                    signal: controller.signal
+                });
             }
-        }
-    } catch (e) {}
+            clearTimeout(timeoutId);
+
+            if (response.ok) {
+                const res = await response.json();
+                if (res.success && res.data) {
+                    extractedData = res.data;
+                    break;
+                } else if (res.hd || res.video) {
+                    extractedData = {
+                        title: res.title || "Extracted Video",
+                        thumbnail: res.thumbnail || "",
+                        duration: 0,
+                        uploader: `${currentPlatform.toUpperCase()} Creator`,
+                        hd: { url: res.hd || res.video, quality: "1080p Full HD" },
+                        sd: { url: res.sd || res.video, quality: "480p SD" },
+                        audio: { url: res.hd || res.video, quality: "320kbps MP3 Audio" }
+                    };
+                    break;
+                }
+            }
+        } catch (e) {}
+    }
 
     // 2. Client-Side Multi-Gateway Extractor
     if (!extractedData) {
