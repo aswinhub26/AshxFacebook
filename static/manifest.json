@@ -1,5 +1,5 @@
 {
-  "id": "ashx-studio-hd-downloader-v1",
+  "id": "/",
   "name": "Ashx Studio HD Video Downloader",
   "short_name": "AshxStudio",
   "description": "Premium 1080p Full HD Video and Reel Downloader Studio",
@@ -9,19 +9,35 @@
   "background_color": "#07070A",
   "theme_color": "#07070A",
   "orientation": "portrait-primary",
-  "categories": ["utilities", "video", "multimedia"],
+  "categories": [
+    "utilities",
+    "video",
+    "multimedia"
+  ],
   "icons": [
     {
       "src": "/static/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/static/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "screenshots": [
