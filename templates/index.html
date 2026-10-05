@@ -42,7 +42,7 @@
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- Titanium iOS 26 Glass CSS -->
-    <link rel="stylesheet" href="./static/style.css">
+    <link rel="stylesheet" href="./static/style.css?v=2.1">
 </head>
 <body class="min-h-screen overflow-x-hidden selection:bg-white/20 font-sans relative flex flex-col justify-between noise-overlay">
 
@@ -332,16 +332,18 @@
     </footer>
 
     <!-- Scripts -->
-    <script src="./static/app.js"></script>
+    <script src="./static/app.js?v=2.1"></script>
     <script>
-        lucide.createIcons();
+        if (window.lucide) lucide.createIcons();
 
+        // Clear stale caches and update Service Worker
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then((reg) => console.log('SW Registered: ', reg.scope))
-                    .catch((err) => console.log('SW failed: ', err));
+            navigator.serviceWorker.getRegistrations().then(registrations => {
+                for (let r of registrations) {
+                    r.update();
+                }
             });
+            navigator.serviceWorker.register('./sw.js?v=2.1');
         }
 
         const card = document.getElementById('card-container');

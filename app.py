@@ -106,6 +106,13 @@ def extract_media(url: str):
 def index():
     return render_template('index.html')
 
+@app.after_request
+def add_header(response):
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
 @app.route('/api/extract', methods=['POST'])
 def extract():
     data = request.get_json() or {}
