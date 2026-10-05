@@ -331,26 +331,20 @@ async function handleExtract() {
     // 1. Try configured / hosted backend endpoints (supports Netlify -> Render / Railway / Local)
     const backendEndpoints = [
         '/api/extract',
-        'https://ashx-downloader-api.onrender.com/api/extract',
-        'https://fbdown-api.onrender.com/api/get?url=' + encodeURIComponent(rawUrl)
+        'https://ashx-downloader-api.onrender.com/api/extract'
     ];
 
     for (const ep of backendEndpoints) {
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 4000);
+            const timeoutId = setTimeout(() => controller.abort(), 25000);
             
-            let response;
-            if (ep.includes('?url=')) {
-                response = await fetch(ep, { signal: controller.signal });
-            } else {
-                response = await fetch(ep, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: rawUrl }),
-                    signal: controller.signal
-                });
-            }
+            let response = await fetch(ep, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: rawUrl }),
+                signal: controller.signal
+            });
             clearTimeout(timeoutId);
 
             if (response.ok) {
