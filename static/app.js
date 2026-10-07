@@ -223,23 +223,51 @@ function setupEventListeners() {
                     if (receivedLength > 50000) {
                         const mime = isAudio ? 'audio/mpeg' : 'video/mp4';
                         const blob = new Blob(chunks, { type: mime });
-                        const blobUrl = window.URL.createObjectURL(blob);
                         
-                        const tempLink = document.createElement('a');
-                        tempLink.style.display = 'none';
-                        tempLink.href = blobUrl;
-                        tempLink.download = fileName;
-                        document.body.appendChild(tempLink);
-                        tempLink.click();
-                        
-                        setTimeout(() => {
-                            document.body.removeChild(tempLink);
-                            window.URL.revokeObjectURL(blobUrl);
-                        }, 2000);
+                        // iOS Camera Roll / Photos Gallery Direct Save Integration
+                        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+                        let savedViaIOSShare = false;
 
-                        downloadSuccess = true;
-                        downloadBtnLabel.innerHTML = isAudio ? `✓ Saved MP3 Audio!` : `✓ Saved to Downloads!`;
-                        updateIslandState('success', 'Saved to Device', `${ext.toUpperCase()} saved successfully`);
+                        if (isIOS && navigator.canShare && !isAudio) {
+                            try {
+                                const file = new File([blob], fileName, { type: mime });
+                                if (navigator.canShare({ files: [file] })) {
+                                    downloadBtnLabel.textContent = "Tap 'Save Video'...";
+                                    updateIslandState('active', 'Tap "Save Video"', 'Saves directly to Photos Gallery');
+                                    
+                                    await navigator.share({
+                                        files: [file],
+                                        title: 'Save to Photos Gallery'
+                                    });
+                                    
+                                    savedViaIOSShare = true;
+                                    downloadSuccess = true;
+                                    downloadBtnLabel.innerHTML = `✓ Saved to Photos!`;
+                                    updateIslandState('success', 'Saved to Gallery', 'Video is in your Photos app');
+                                }
+                            } catch (shareErr) {
+                                console.log('iOS Share dismissed or fallback:', shareErr);
+                            }
+                        }
+
+                        if (!savedViaIOSShare) {
+                            const blobUrl = window.URL.createObjectURL(blob);
+                            const tempLink = document.createElement('a');
+                            tempLink.style.display = 'none';
+                            tempLink.href = blobUrl;
+                            tempLink.download = fileName;
+                            document.body.appendChild(tempLink);
+                            tempLink.click();
+                            
+                            setTimeout(() => {
+                                document.body.removeChild(tempLink);
+                                window.URL.revokeObjectURL(blobUrl);
+                            }, 2000);
+
+                            downloadSuccess = true;
+                            downloadBtnLabel.innerHTML = isAudio ? `✓ Saved MP3 Audio!` : `✓ Saved to Downloads!`;
+                            updateIslandState('success', 'Saved to Device', `${ext.toUpperCase()} saved successfully`);
+                        }
                     }
                 }
             }
