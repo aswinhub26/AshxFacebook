@@ -169,8 +169,8 @@ function setupEventListeners() {
         }
     });
 
-    // Universal High-Speed Media Downloader (MP4 / MP3)
-    downloadTriggerBtn.addEventListener('click', async (e) => {
+    // Universal High-Speed Media Downloader (Mobile & Desktop Native Engine)
+    downloadTriggerBtn.addEventListener('click', (e) => {
         e.preventDefault();
         if (!currentVideoData) return;
         const item = currentVideoData[selectedQuality] || currentVideoData.hd;
@@ -180,120 +180,45 @@ function setupEventListeners() {
         const ext = isAudio ? 'mp3' : 'mp4';
         const originalLabel = downloadBtnLabel.innerHTML;
         const originalBg = downloadTriggerBtn.className;
-        
-        downloadBtnLabel.textContent = isAudio ? "Extracting MP3..." : "Downloading HD Video...";
-        downloadTriggerBtn.classList.add('opacity-75', 'pointer-events-none');
-        updateIslandState('busy', isAudio ? 'Saving Audio' : 'Saving Video', 'Connecting high-speed stream...');
 
         const safeTitle = (currentVideoData.title || 'AshxStudio_Media').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 35);
         const fileName = `AshxStudio_${safeTitle}_${selectedQuality.toUpperCase()}.${ext}`;
         const downloadApiUrl = `/api/download?url=${encodeURIComponent(item.url)}&title=${encodeURIComponent(safeTitle)}&ext=${ext}`;
 
-        let downloadSuccess = false;
+        downloadBtnLabel.textContent = isAudio ? "Downloading MP3..." : "Downloading HD Video...";
+        downloadTriggerBtn.classList.add('opacity-75');
+        updateIslandState('active', isAudio ? 'Downloading MP3' : 'Downloading HD Video', 'Check Downloads / Notification bar');
+
+        // Detect iOS (iPhone / iPad) vs Android / Desktop
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
         try {
-            // First attempt: fetch through our robust backend proxy with real-time progress
-            const resp = await fetch(downloadApiUrl);
-            
-            if (resp.ok) {
-                const contentType = resp.headers.get('Content-Type') || '';
-                // Check if backend returned valid media stream
-                if (contentType.includes('video') || contentType.includes('audio') || contentType.includes('application/octet-stream')) {
-                    const reader = resp.body.getReader();
-                    const contentLength = +resp.headers.get('Content-Length') || 0;
-                    let receivedLength = 0;
-                    let chunks = [];
-
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        chunks.push(value);
-                        receivedLength += value.length;
-                        
-                        if (contentLength > 0) {
-                            const percent = Math.min(100, Math.round((receivedLength / contentLength) * 100));
-                            downloadBtnLabel.textContent = `Downloading ${percent}%...`;
-                        } else {
-                            const mb = (receivedLength / (1024 * 1024)).toFixed(1);
-                            downloadBtnLabel.textContent = `Downloading ${mb} MB...`;
-                        }
-                    }
-
-                    // Only save if received at least 50KB of genuine binary data
-                    if (receivedLength > 50000) {
-                        const mime = isAudio ? 'audio/mpeg' : 'video/mp4';
-                        const blob = new Blob(chunks, { type: mime });
-                        
-                        // iOS Camera Roll / Photos Gallery Direct Save Integration
-                        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-                        let savedViaIOSShare = false;
-
-                        if (isIOS && navigator.canShare && !isAudio) {
-                            try {
-                                const file = new File([blob], fileName, { type: mime });
-                                if (navigator.canShare({ files: [file] })) {
-                                    downloadBtnLabel.textContent = "Tap 'Save Video'...";
-                                    updateIslandState('active', 'Tap "Save Video"', 'Saves directly to Photos Gallery');
-                                    
-                                    await navigator.share({
-                                        files: [file],
-                                        title: 'Save to Photos Gallery'
-                                    });
-                                    
-                                    savedViaIOSShare = true;
-                                    downloadSuccess = true;
-                                    downloadBtnLabel.innerHTML = `✓ Saved to Photos!`;
-                                    updateIslandState('success', 'Saved to Gallery', 'Video is in your Photos app');
-                                }
-                            } catch (shareErr) {
-                                console.log('iOS Share dismissed or fallback:', shareErr);
-                            }
-                        }
-
-                        if (!savedViaIOSShare) {
-                            const blobUrl = window.URL.createObjectURL(blob);
-                            const tempLink = document.createElement('a');
-                            tempLink.style.display = 'none';
-                            tempLink.href = blobUrl;
-                            tempLink.download = fileName;
-                            document.body.appendChild(tempLink);
-                            tempLink.click();
-                            
-                            setTimeout(() => {
-                                document.body.removeChild(tempLink);
-                                window.URL.revokeObjectURL(blobUrl);
-                            }, 2000);
-
-                            downloadSuccess = true;
-                            downloadBtnLabel.innerHTML = isAudio ? `✓ Saved MP3 Audio!` : `✓ Saved to Downloads!`;
-                            updateIslandState('success', 'Saved to Device', `${ext.toUpperCase()} saved successfully`);
-                        }
-                    }
-                }
+            if (isIOS) {
+                // On iOS Safari: Direct location trigger opens native Safari download sheet with zero gesture drop
+                window.location.href = downloadApiUrl;
+            } else {
+                // Android & Desktop: Create anchor tag for native background download
+                const tempLink = document.createElement('a');
+                tempLink.href = downloadApiUrl;
+                tempLink.setAttribute('download', fileName);
+                document.body.appendChild(tempLink);
+                tempLink.click();
+                setTimeout(() => {
+                    document.body.removeChild(tempLink);
+                }, 1000);
             }
-        } catch (fetchErr) {
-            console.warn('Direct stream fetch fallback:', fetchErr);
-        }
 
-        // Fallback: Trigger native browser / Android DownloadManager directly via window/iframe
-        if (!downloadSuccess) {
-            downloadBtnLabel.textContent = "Starting Native Download...";
-            const directLink = document.createElement('a');
-            directLink.href = downloadApiUrl;
-            directLink.setAttribute('download', fileName);
-            directLink.setAttribute('target', '_blank');
-            document.body.appendChild(directLink);
-            directLink.click();
-            setTimeout(() => document.body.removeChild(directLink), 1500);
-
-            updateIslandState('active', 'Downloading Media', 'Check device notifications / downloads');
-            downloadBtnLabel.innerHTML = `✓ Download Triggered!`;
+            downloadBtnLabel.innerHTML = `✓ Download Started!`;
+            updateIslandState('success', 'Download Started', 'Saved to your device Downloads');
+        } catch (err) {
+            console.error('Download trigger fallback:', err);
+            window.location.href = downloadApiUrl;
         }
 
         setTimeout(() => {
             downloadBtnLabel.innerHTML = originalLabel;
             downloadTriggerBtn.className = originalBg;
-            downloadTriggerBtn.classList.remove('opacity-75', 'pointer-events-none');
+            downloadTriggerBtn.classList.remove('opacity-75');
         }, 3500);
     });
 
