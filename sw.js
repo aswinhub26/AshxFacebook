@@ -1,15 +1,16 @@
-// AshxStudio Service Worker - PWABuilder High Performance Compliant
-const CACHE_NAME = 'ashx-studio-pwa-v1';
+// AshxStudio Service Worker - Force Cache Bust & Auto-Refresh
+const CACHE_NAME = 'ashx-studio-v6-fresh';
 const OFFLINE_URLS = [
   '/',
   '/manifest.json',
   '/static/style.css',
-  '/static/app.js',
+  '/static/app.js?v=6.0',
   '/static/icon-192.png',
   '/static/icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(OFFLINE_URLS).catch((err) => {
@@ -17,7 +18,6 @@ self.addEventListener('install', (event) => {
       });
     })
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -35,8 +35,11 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Network First: Always try to get latest from network, fallback to cache only if offline
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  // Never intercept download or extract API requests in service worker
+  if (event.request.url.includes('/api/')) return;
   
   event.respondWith(
     fetch(event.request)
