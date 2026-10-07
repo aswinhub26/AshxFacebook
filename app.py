@@ -45,12 +45,6 @@ def extract_media(url: str):
         'no_warnings': True,
         'skip_download': True,
         'extract_flat': False,
-        'http_headers': HEADERS,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'ios', 'mweb', 'web']
-            }
-        }
     }
     
     cookie_file = None
