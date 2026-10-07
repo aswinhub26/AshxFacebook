@@ -1,6 +1,6 @@
 # AshxStudio
 
-> **Production Deployment:** [https://ashxfacebook.onrender.com/](https://ashxfacebook.onrender.com/)  
+> **Production Deployment:** [https://ashxstudio.onrender.com/](https://ashxfacebook.onrender.com/)  
 > **System Status:** Operational (24/7 Active Monitoring via UptimeRobot)
 
 AshxStudio is a high-throughput multimedia extraction and streaming engine built with a Python backend and an iOS-grade responsive web interface. The system provides progressive video demuxing (up to 1080p Full HD) and high-bitrate audio extraction (320kbps MP3) across major content distribution platforms, including Facebook, Instagram, YouTube, and WhatsApp.
