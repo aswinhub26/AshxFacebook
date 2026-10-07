@@ -366,8 +366,8 @@ async function checkSmartClipboard() {
         if (clipboardToast) {
             clipboardToast.classList.remove('hidden');
             requestAnimationFrame(() => {
-                clipboardToast.classList.remove('-translate-y-2', 'opacity-0');
-                clipboardToast.classList.add('translate-y-0', 'opacity-100');
+                clipboardToast.classList.remove('-translate-y-3', 'scale-95', 'opacity-0');
+                clipboardToast.classList.add('translate-y-0', 'scale-100', 'opacity-100');
                 isToastVisible = true;
             });
         }
@@ -380,12 +380,12 @@ async function checkSmartClipboard() {
 
 function hideClipboardToast() {
     if (!isToastVisible || !clipboardToast) return;
-    clipboardToast.classList.remove('translate-y-0', 'opacity-100');
-    clipboardToast.classList.add('-translate-y-2', 'opacity-0');
+    clipboardToast.classList.remove('translate-y-0', 'scale-100', 'opacity-100');
+    clipboardToast.classList.add('-translate-y-3', 'scale-95', 'opacity-0');
     setTimeout(() => {
         clipboardToast.classList.add('hidden');
         isToastVisible = false;
-    }, 300);
+    }, 400);
 }
 
 // Auto-detect platform from URL string
