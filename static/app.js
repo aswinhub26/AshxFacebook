@@ -47,6 +47,15 @@ const guideModalBtn = document.getElementById('guide-modal-btn');
 const closeGuideBtn = document.getElementById('close-guide-btn');
 const dismissGuideBtn = document.getElementById('dismiss-guide-btn');
 
+const clipboardToast = document.getElementById('clipboard-toast');
+const clipboardToastIcon = document.getElementById('clipboard-toast-icon');
+const clipboardToastTitle = document.getElementById('clipboard-toast-title');
+const clipboardToastUrl = document.getElementById('clipboard-toast-url');
+const clipboardFetchBtn = document.getElementById('clipboard-fetch-btn');
+const clipboardDismissBtn = document.getElementById('clipboard-dismiss-btn');
+let lastDetectedClipboardUrl = '';
+let isToastVisible = false;
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     initAmbientCanvas();
@@ -63,6 +72,17 @@ document.addEventListener('DOMContentLoaded', () => {
         clearBtn.classList.remove('hidden');
         detectPlatformFromUrl(targetUrl);
         handleExtract();
+    } else {
+        // Run Smart Auto-Clipboard Detection on launch
+        setTimeout(checkSmartClipboard, 800);
+    }
+});
+
+// Auto-check clipboard on tab focus / app resume
+window.addEventListener('focus', checkSmartClipboard);
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        checkSmartClipboard();
     }
 });
 
@@ -266,6 +286,23 @@ function setupEventListeners() {
         }
     });
 
+    // Smart Clipboard Toast Events
+    if (clipboardFetchBtn) {
+        clipboardFetchBtn.addEventListener('click', () => {
+            if (lastDetectedClipboardUrl) {
+                urlInput.value = lastDetectedClipboardUrl;
+                clearBtn.classList.remove('hidden');
+                detectPlatformFromUrl(lastDetectedClipboardUrl);
+                hideClipboardToast();
+                handleExtract();
+            }
+        });
+    }
+
+    if (clipboardDismissBtn) {
+        clipboardDismissBtn.addEventListener('click', hideClipboardToast);
+    }
+
     clearHistoryBtn.addEventListener('click', () => {
         localStorage.removeItem(STORAGE_KEY);
         renderHistory();
@@ -274,6 +311,81 @@ function setupEventListeners() {
     guideModalBtn.addEventListener('click', () => openModal(guideModal));
     closeGuideBtn.addEventListener('click', () => closeModal(guideModal));
     dismissGuideBtn.addEventListener('click', () => closeModal(guideModal));
+}
+
+// Smart Clipboard Functions
+function getPlatformDetails(url) {
+    if (url.includes('instagram.com')) {
+        return {
+            name: 'Instagram Reel',
+            platform: 'instagram',
+            icon: `<svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6.5" fill="url(#ig-grad-toast)"/><rect x="5.5" y="5.5" width="13" height="13" rx="3.5" stroke="white" stroke-width="1.6"/><circle cx="12" cy="12" r="3.2" stroke="white" stroke-width="1.6"/><circle cx="15.8" cy="8.2" r="0.9" fill="white"/><defs><radialGradient id="ig-grad-toast" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(4.8 24) rotate(-55) scale(27)"><stop stop-color="#FFDD55"/><stop offset="0.25" stop-color="#FF5D3B"/><stop offset="0.5" stop-color="#FF0069"/><stop offset="0.75" stop-color="#D300C5"/><stop offset="1" stop-color="#7638FA"/></radialGradient></defs></svg>`
+        };
+    } else if (url.includes('youtube.com') || url.includes('youtu.be')) {
+        return {
+            name: 'YouTube Short / Video',
+            platform: 'youtube',
+            icon: `<svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="#FF0000"/><path d="M10 8.5L15.5 12L10 15.5V8.5Z" fill="white"/></svg>`
+        };
+    } else if (url.includes('facebook.com') || url.includes('fb.watch')) {
+        return {
+            name: 'Facebook Video / Reel',
+            platform: 'facebook',
+            icon: `<svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="12" fill="#1877F2"/><path d="M14.5 12.5H12.7V19H10V12.5H8.7V10.2H10V8.7C10 7.3 10.7 6 12.8 6C13.8 6 14.5 6.1 14.5 6.1V8.3H13.6C12.9 8.3 12.7 8.7 12.7 9.3V10.2H14.7L14.5 12.5Z" fill="white"/></svg>`
+        };
+    } else if (url.includes('whatsapp.com') || url.includes('wa.me')) {
+        return {
+            name: 'WhatsApp Media / Link',
+            platform: 'whatsapp',
+            icon: `<svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="12" fill="#25D366"/><path d="M17.2 14.5C17 14.4 15.8 13.8 15.6 13.7C15.4 13.6 15.2 13.6 15.1 13.8C14.9 14.1 14.4 14.7 14.2 14.9C14.1 15.1 13.9 15.1 13.7 15C13.5 14.9 12.7 14.6 11.8 13.8C11.1 13.1 10.6 12.3 10.5 12.1C10.4 11.9 10.5 11.8 10.6 11.7C10.7 11.6 10.8 11.4 10.9 11.3C11 11.2 11.1 11.1 11.1 11C11.2 10.9 11.1 10.7 11.1 10.6C11 10.5 10.6 9.4 10.4 8.9C10.2 8.4 10 8.5 9.9 8.5H9.4C9.2 8.5 9 8.6 8.8 8.8C8.6 9 8 9.6 8 10.7C8 11.9 8.8 13 9 13.2C9.1 13.3 10.6 15.6 12.9 16.6C15.2 17.5 15.2 17.2 15.6 17.2C16 17.1 16.9 16.6 17.1 16.1C17.3 15.5 17.3 15 17.2 14.9C17.2 14.8 17.1 14.7 16.9 14.6L17.2 14.5Z" fill="white"/></svg>`
+        };
+    }
+    return null;
+}
+
+async function checkSmartClipboard() {
+    if (!navigator.clipboard || !navigator.clipboard.readText) return;
+    try {
+        const text = await navigator.clipboard.readText();
+        if (!text || typeof text !== 'string') return;
+        
+        const match = text.match(/https?:\/\/[^\s]+/);
+        if (!match) return;
+        const detectedUrl = match[0].trim();
+
+        if (detectedUrl === lastDetectedClipboardUrl || detectedUrl === urlInput.value.trim()) return;
+
+        const info = getPlatformDetails(detectedUrl);
+        if (!info) return;
+
+        lastDetectedClipboardUrl = detectedUrl;
+        if (clipboardToastTitle) clipboardToastTitle.textContent = `${info.name} Detected`;
+        if (clipboardToastUrl) clipboardToastUrl.textContent = detectedUrl;
+        if (clipboardToastIcon) clipboardToastIcon.innerHTML = info.icon;
+
+        if (clipboardToast) {
+            clipboardToast.classList.remove('hidden');
+            requestAnimationFrame(() => {
+                clipboardToast.classList.remove('-translate-y-2', 'opacity-0');
+                clipboardToast.classList.add('translate-y-0', 'opacity-100');
+                isToastVisible = true;
+            });
+        }
+
+        updateIslandState('active', `${info.name} in Clipboard`, 'Tap "Fetch Now" to download');
+    } catch (e) {
+        // Clipboard read permission not granted or browser focus policy, silent fail
+    }
+}
+
+function hideClipboardToast() {
+    if (!isToastVisible || !clipboardToast) return;
+    clipboardToast.classList.remove('translate-y-0', 'opacity-100');
+    clipboardToast.classList.add('-translate-y-2', 'opacity-0');
+    setTimeout(() => {
+        clipboardToast.classList.add('hidden');
+        isToastVisible = false;
+    }, 300);
 }
 
 // Auto-detect platform from URL string
