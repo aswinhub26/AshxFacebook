@@ -1,60 +1,117 @@
-# AshxStudio — Multi-Platform HD Media & Audio Extraction Studio
+# AshxStudio
 
-> **🌐 Live Application:** [https://ashxfacebook.onrender.com/](https://ashxfacebook.onrender.com/)  
-> **⚡ Status:** Active & Deployed (24/7 Monitored)
+> **Production Deployment:** [https://ashxfacebook.onrender.com/](https://ashxfacebook.onrender.com/)  
+> **System Status:** Operational (24/7 Active Monitoring via UptimeRobot)
 
-A high-performance multimedia platform built with **Apple iOS 26 Liquid Glassmorphism** and a **Python / yt-dlp backend** to extract 1080p Full HD video and 320kbps MP3 audio from Facebook Reels, Instagram Reels, YouTube Shorts, and WhatsApp Status.
-
----
-
-## 🚀 Live Demo
-
-You can try the live app directly on mobile or desktop:  
-👉 **[Open AshxStudio](https://ashxfacebook.onrender.com/)**
-
-- **Android:** Open in Chrome ➔ Tap `⋮` ➔ Select **Install app**
-- **iOS / iPhone:** Open in Safari ➔ Tap `Share (↑)` ➔ Select **Add to Home Screen**
+AshxStudio is a high-throughput multimedia extraction and streaming engine built with a Python backend and an iOS-grade responsive web interface. The system provides progressive video demuxing (up to 1080p Full HD) and high-bitrate audio extraction (320kbps MP3) across major content distribution platforms, including Facebook, Instagram, YouTube, and WhatsApp.
 
 ---
 
-## ✨ Key Features
+## System Architecture & Workflow
 
-- **Multi-Platform HD Extraction:** 1080p / 720p Full HD video and 320kbps MP3 audio extraction for Facebook, Instagram, YouTube Shorts, and WhatsApp.
-- **Smart Auto-Clipboard Detection:** Automatically detects copied media URLs upon app focus with an interactive iOS Dynamic Island toast notification.
-- **iOS Photos Direct Save:** Integrated Apple Web Share File API to save videos directly into the iOS Camera Roll / Photos app.
-- **Streaming Proxy Architecture:** Server-side progressive stream demuxing directly to client with zero intermediate disk caching.
-- **Progressive Web App (PWA):** 100% PWA compliant with offline service worker support and Android Share Target intent handling.
-- **Agency-Tier UI:** Designed with smoked obsidian `#07070A` glassmorphism, Cupertino frosted cards, specular highlights, and spring physics.
+The platform operates on a decoupled client-server architecture designed to eliminate local disk I/O bottlenecks and resolve cross-origin resource sharing (CORS) restrictions through real-time binary stream proxying.
+
+```mermaid
+flowchart TD
+    subgraph Client ["Client Layer (PWA / Browser / iOS)"]
+        A[User Focus / Share Intent] -->|Auto-Detect URL| B[Context-Aware Clipboard Listener]
+        B --> C[Dynamic Island Notification]
+        C -->|Trigger Extract| D[HTTP POST /api/extract]
+    end
+
+    subgraph Server ["Application Server (Flask / Python)"]
+        D --> E[URL Normalizer & Sanitizer]
+        E --> F[yt-dlp Demuxing Engine]
+        F --> G{Format Selector}
+        G -->|Progressive HD MP4| H[Metadata & Stream Resolver]
+        G -->|Direct MP3 Audio| H
+        H -->|JSON Response| Client
+    end
+
+    subgraph Streaming ["Streaming & Storage Layer"]
+        Client -->|Initiate Download| I[HTTP GET /api/download]
+        I --> J[Streaming Proxy Controller]
+        J -->|Chunked HTTP Request| K[Upstream CDN / Platform API]
+        K -->|64KB Raw Binary Stream| J
+        J -->|Content-Disposition: attachment| L[Client Ingestion]
+    end
+
+    subgraph Ingestion ["Native Client Ingestion"]
+        L -->|iOS Safari| M[Web Share File API -> Apple Photos]
+        L -->|Android / Desktop| N[Native Browser Download Manager]
+    end
+```
 
 ---
 
-## 🛠️ Tech Stack
+## Technical Workflow Stages
 
-- **Backend:** Python 3, Flask, yt-dlp, Gunicorn, Requests
-- **Frontend:** HTML5 Canvas, Tailwind CSS, Lucide Icons, Plus Jakarta Sans & Inter typography
-- **PWA & Mobile:** Service Worker (`sw.js`), Web App Manifest, Android WebView / TWA wrapper
-- **Hosting & Infrastructure:** Render Web Services, GitHub Actions, UptimeRobot
+### 1. Ingestion & Context Detection
+- **Auto-Clipboard Resolution:** Event listeners (`window:focus`, `document:visibilitychange`) query `navigator.clipboard` to identify valid media URIs upon user return, triggering contextual UI prompts without manual pasting.
+- **Progressive Web App (PWA) Target:** Integrated Android Share Target handlers intercept incoming URI intents directly from native social applications.
+
+### 2. Stream Resolution & Demuxing
+- **Engine:** Python Flask layer coupled with `yt-dlp` using platform-specific extraction arguments (e.g., mobile client emulation).
+- **Progressive Selection:** Formats are filtered to prioritize combined video and audio streams over segmented DASH/HLS playlists, ensuring out-of-the-box container integrity.
+
+### 3. Server-Side Binary Chunk Proxy
+- **Zero-Disk Streaming:** Direct `stream_with_context` implementation pipes upstream CDN data in 64 KB memory chunks directly to the HTTP response buffer.
+- **Content Verification:** Upstream responses are validated for binary MIME types before streaming, preventing corrupt HTML/error pages from being saved as media files.
+
+### 4. Platform-Specific Delivery
+- **iOS Photos Integration:** Implements the Web Share File API (`navigator.share({ files })`) to allow iPhone users to write MP4 files directly to the Camera Roll.
+- **Desktop & Android:** Dispatches native attachment headers for direct filesystem writes.
 
 ---
 
-## 💻 Local Development
+## Tech Stack
+
+| Layer | Technologies |
+| :--- | :--- |
+| **Backend Runtime** | Python 3.10+, Flask, Gunicorn |
+| **Core Media Engine** | yt-dlp, Requests |
+| **Client Frontend** | Vanilla JavaScript (ES6+), Tailwind CSS, Plus Jakarta Sans, Inter |
+| **Mobile Integration** | Service Worker (Cache-First Precache), Web App Manifest, Web Share API |
+| **Infrastructure** | Render Web Services, GitHub Actions CI/CD, UptimeRobot |
+
+---
+
+## Local Development
+
+### Prerequisites
+- Python 3.10 or higher
+- Git
+
+### Installation
 
 ```bash
-# 1. Clone repository
+# Clone the repository
 git clone https://github.com/aswinhub26/AshxStudio.git
 cd AshxStudio
 
-# 2. Install dependencies
+# Install required Python packages
 pip install -r requirements.txt
 
-# 3. Start local development server
+# Start local server
 python app.py
 ```
 
-Open `http://127.0.0.1:5000` in your browser.
+The application will be accessible at `http://127.0.0.1:5000`.
 
 ---
 
-## 📄 License
+## Production Deployment (Render)
 
-MIT License. Designed and engineered for high-performance multimedia extraction.
+1. Connect the GitHub repository to [Render.com](https://render.com/).
+2. Create a new **Web Service** with the following parameters:
+   - **Environment:** `Python 3`
+   - **Build Command:** `pip install -r requirements.txt`
+   - **Start Command:** `gunicorn app:app`
+   - **Plan:** `Free`
+3. Configure a 5-minute health check monitor via UptimeRobot targeting `/` to avoid cold-start instance spin-down.
+
+---
+
+## License
+
+This project is licensed under the MIT License.
