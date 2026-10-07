@@ -53,6 +53,20 @@ def extract_media(url: str):
         }
     }
     
+    cookie_file = None
+    if os.path.exists('cookies.txt'):
+        cookie_file = 'cookies.txt'
+    elif os.environ.get('IG_COOKIES'):
+        try:
+            with open('ig_cookies.txt', 'w') as f:
+                f.write(os.environ.get('IG_COOKIES'))
+            cookie_file = 'ig_cookies.txt'
+        except Exception as ce:
+            logger.warning(f"Could not write cookie file: {ce}")
+
+    if cookie_file:
+        ydl_opts['cookiefile'] = cookie_file
+    
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
         formats = info.get('formats', [])
@@ -159,11 +173,27 @@ def extract():
         if info and (info.get('hd', {}).get('url') or info.get('audio', {}).get('url')):
             return jsonify({"success": True, "data": info})
     except Exception as e:
-        logger.warning(f"yt-dlp extraction error: {e}")
+        err_str = str(e)
+        logger.warning(f"yt-dlp extraction error: {err_str}")
+        if "not granting access" in err_str or "empty media response" in err_str or "login" in err_str.lower():
+            return jsonify({
+                "success": False, 
+                "error": "Instagram restricted access to this Reel (it is Age-Restricted 18+, Sensitive, or Private). Please try public posts or reels."
+            }), 403
+        elif "private" in err_str.lower():
+            return jsonify({
+                "success": False, 
+                "error": "This post is from a Private Account. Only public media can be downloaded without authentication."
+            }), 403
+        elif "copyright" in err_str.lower() or "blocked" in err_str.lower():
+            return jsonify({
+                "success": False,
+                "error": "This media is blocked or restricted by the platform."
+            }), 403
         
     return jsonify({
         "success": False, 
-        "error": "Could not extract media. Ensure the post is public and the link is active."
+        "error": "Could not extract media. Ensure the link is public and active."
     }), 422
 
 @app.route('/api/download')
