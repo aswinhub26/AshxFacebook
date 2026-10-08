@@ -1,10 +1,10 @@
 // AshxStudio Service Worker - Force Cache Bust & Auto-Refresh
-const CACHE_NAME = 'ashx-studio-v6-fresh';
+const CACHE_NAME = 'ashx-studio-v7-fresh';
 const OFFLINE_URLS = [
   '/',
   '/manifest.json',
   '/static/style.css',
-  '/static/app.js?v=6.0',
+  '/static/app.js?v=7.0',
   '/static/icon-192.png',
   '/static/icon-512.png'
 ];

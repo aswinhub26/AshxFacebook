@@ -37,7 +37,7 @@ def clean_url(raw_url: str) -> str:
             logger.warning(f"Could not resolve redirect: {e}")
     return raw_url
 
-def extract_media(url: str):
+def extract_media(url: str, custom_sessionid: str = None):
     """Multi-platform media extractor for FB Reels, Insta Reels, YouTube Shorts, etc."""
     ydl_opts = {
         'format': 'best[ext=mp4]/bestvideo+bestaudio/best',
@@ -45,6 +45,12 @@ def extract_media(url: str):
         'no_warnings': True,
         'skip_download': True,
         'extract_flat': False,
+        'nocheckcertificate': True,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'ios', 'mweb', 'web']
+            }
+        }
     }
     
     cookie_file = None
@@ -57,6 +63,18 @@ def extract_media(url: str):
             cookie_file = 'ig_cookies.txt'
         except Exception as ce:
             logger.warning(f"Could not write cookie file: {ce}")
+    elif custom_sessionid or os.environ.get('IG_SESSIONID'):
+        sess_val = (custom_sessionid or os.environ.get('IG_SESSIONID')).strip()
+        try:
+            netscape_cookie = (
+                "# Netscape HTTP Cookie File\n"
+                f".instagram.com\tTRUE\t/\tTRUE\t2147483647\tsessionid\t{sess_val}\n"
+            )
+            with open('ig_session_cookies.txt', 'w') as f:
+                f.write(netscape_cookie)
+            cookie_file = 'ig_session_cookies.txt'
+        except Exception as ce:
+            logger.warning(f"Could not write session cookie file: {ce}")
 
     if cookie_file:
         ydl_opts['cookiefile'] = cookie_file
@@ -106,8 +124,12 @@ def extract_media(url: str):
         hd_height = chosen_hd.get('height') if chosen_hd else None
         sd_height = chosen_sd.get('height') if chosen_sd else None
         
-        hd_label = f"{hd_height}p Full HD" if hd_height else "1080p Full HD"
-        sd_label = f"{sd_height}p SD" if sd_height else "480p Standard"
+        hd_label = f"{hd_height}p HD (Sound Included)" if hd_height else "1080p Full HD"
+        sd_label = f"{sd_height}p SD (Sound Included)" if sd_height else "480p Standard"
+        
+        audio_ext = "mp3"
+        if chosen_audio and chosen_audio.get('ext') in ['m4a', 'aac', 'mp3']:
+            audio_ext = chosen_audio.get('ext')
 
         return {
             "platform": platform,
@@ -128,8 +150,8 @@ def extract_media(url: str):
             },
             "audio": {
                 "url": direct_audio_url,
-                "quality": "320kbps MP3 Audio",
-                "ext": "mp3"
+                "quality": "320kbps Audio (HQ)",
+                "ext": audio_ext
             }
         }
 
@@ -156,6 +178,7 @@ def add_header(response):
 def extract():
     data = request.get_json() or {}
     url = data.get('url', '').strip()
+    custom_sessionid = data.get('ig_sessionid', '').strip() or request.headers.get('X-IG-SessionId', '').strip()
     
     if not url:
         return jsonify({"success": False, "error": "Please provide a valid media link."}), 400
@@ -163,7 +186,7 @@ def extract():
     cleaned = clean_url(url)
     
     try:
-        info = extract_media(cleaned)
+        info = extract_media(cleaned, custom_sessionid=custom_sessionid)
         if info and (info.get('hd', {}).get('url') or info.get('audio', {}).get('url')):
             return jsonify({"success": True, "data": info})
     except Exception as e:
@@ -172,7 +195,8 @@ def extract():
         if "not granting access" in err_str or "empty media response" in err_str or "login" in err_str.lower():
             return jsonify({
                 "success": False, 
-                "error": "Instagram restricted access to this Reel (it is Age-Restricted 18+, Sensitive, or Private). Please try public posts or reels."
+                "error": "Instagram restricted access to this Reel without a login session. Add your Instagram Session ID in AshxStudio Settings or in Render environment variables (IG_SESSIONID).",
+                "needs_ig_auth": True
             }), 403
         elif "private" in err_str.lower():
             return jsonify({
@@ -181,7 +205,7 @@ def extract():
             }), 403
         elif "copyright" in err_str.lower() or "blocked" in err_str.lower():
             return jsonify({
-                "success": False,
+                "success": False, 
                 "error": "This media is blocked or restricted by the platform."
             }), 403
         
@@ -202,15 +226,28 @@ def download():
         
     safe_title = re.sub(r'[^a-zA-Z0-9_-]', '_', title)[:40]
     filename = f"AshxStudio_{safe_title}.{ext}"
-    mime = 'audio/mpeg' if ext == 'mp3' else 'video/mp4'
+    
+    mime_map = {
+        'mp3': 'audio/mpeg',
+        'm4a': 'audio/mp4',
+        'aac': 'audio/aac',
+        'mp4': 'video/mp4',
+        'webm': 'video/webm'
+    }
+    mime = mime_map.get(ext, 'application/octet-stream')
 
     try:
         req_headers = {
-            'User-Agent': HEADERS['User-Agent'],
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
             'Accept': '*/*',
             'Accept-Encoding': 'identity',
-            'Referer': 'https://www.google.com/'
+            'Connection': 'keep-alive'
         }
+        
+        # Pass range header for mobile players (iOS Safari / Android Chrome)
+        range_header = request.headers.get('Range')
+        if range_header:
+            req_headers['Range'] = range_header
         
         upstream_resp = requests.get(video_url, headers=req_headers, stream=True, timeout=60, allow_redirects=True)
         
@@ -233,13 +270,17 @@ def download():
             'Content-Type': mime,
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
-            'Expires': '0'
+            'Expires': '0',
+            'Accept-Ranges': 'bytes'
         }
         
         if 'Content-Length' in upstream_resp.headers:
             resp_headers['Content-Length'] = upstream_resp.headers['Content-Length']
+        if 'Content-Range' in upstream_resp.headers:
+            resp_headers['Content-Range'] = upstream_resp.headers['Content-Range']
 
-        return Response(stream_with_context(stream_content()), headers=resp_headers)
+        status_code = upstream_resp.status_code if upstream_resp.status_code in [200, 206] else 200
+        return Response(stream_with_context(stream_content()), status=status_code, headers=resp_headers)
 
     except Exception as e:
         logger.error(f"Download stream error: {e}")

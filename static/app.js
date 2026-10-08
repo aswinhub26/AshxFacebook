@@ -47,6 +47,14 @@ const guideModalBtn = document.getElementById('guide-modal-btn');
 const closeGuideBtn = document.getElementById('close-guide-btn');
 const dismissGuideBtn = document.getElementById('dismiss-guide-btn');
 
+const igModal = document.getElementById('ig-modal');
+const igSettingsBtn = document.getElementById('ig-settings-btn');
+const closeIgBtn = document.getElementById('close-ig-btn');
+const saveIgBtn = document.getElementById('save-ig-btn');
+const clearIgBtn = document.getElementById('clear-ig-btn');
+const igSessionIdInput = document.getElementById('ig-sessionid-input');
+const igKeyStatus = document.getElementById('ig-key-status');
+
 const clipboardToast = document.getElementById('clipboard-toast');
 const clipboardToastIcon = document.getElementById('clipboard-toast-icon');
 const clipboardToastTitle = document.getElementById('clipboard-toast-title');
@@ -177,7 +185,7 @@ function setupEventListeners() {
         if (!item || !item.url) return;
 
         const isAudio = selectedQuality === 'audio';
-        const ext = isAudio ? 'mp3' : 'mp4';
+        const ext = (item && item.ext) || (isAudio ? 'mp3' : 'mp4');
         const originalLabel = downloadBtnLabel.innerHTML;
         const originalBg = downloadTriggerBtn.className;
 
@@ -264,6 +272,41 @@ function setupEventListeners() {
     guideModalBtn.addEventListener('click', () => openModal(guideModal));
     closeGuideBtn.addEventListener('click', () => closeModal(guideModal));
     dismissGuideBtn.addEventListener('click', () => closeModal(guideModal));
+
+    if (igSettingsBtn) {
+        igSettingsBtn.addEventListener('click', () => {
+            const savedKey = localStorage.getItem('ashx_ig_sessionid') || '';
+            if (igSessionIdInput) igSessionIdInput.value = savedKey;
+            if (igKeyStatus) {
+                if (savedKey) igKeyStatus.classList.remove('hidden');
+                else igKeyStatus.classList.add('hidden');
+            }
+            openModal(igModal);
+        });
+    }
+    if (closeIgBtn) closeIgBtn.addEventListener('click', () => closeModal(igModal));
+    if (saveIgBtn) {
+        saveIgBtn.addEventListener('click', () => {
+            const val = igSessionIdInput ? igSessionIdInput.value.trim() : '';
+            if (val) {
+                localStorage.setItem('ashx_ig_sessionid', val);
+                if (igKeyStatus) igKeyStatus.classList.remove('hidden');
+                updateIslandState('success', 'Instagram Key Saved', 'Unlocking full Instagram Reels');
+            } else {
+                localStorage.removeItem('ashx_ig_sessionid');
+                if (igKeyStatus) igKeyStatus.classList.add('hidden');
+            }
+            closeModal(igModal);
+        });
+    }
+    if (clearIgBtn) {
+        clearIgBtn.addEventListener('click', () => {
+            localStorage.removeItem('ashx_ig_sessionid');
+            if (igSessionIdInput) igSessionIdInput.value = '';
+            if (igKeyStatus) igKeyStatus.classList.add('hidden');
+            updateIslandState('active', 'Instagram Key Cleared', '');
+        });
+    }
 }
 
 // Smart Clipboard Functions
@@ -403,49 +446,42 @@ async function handleExtract() {
     updateIslandState('busy', `Resolving ${currentPlatform.toUpperCase()}`, 'Extracting 1080p HD & MP3...');
 
     let extractedData = null;
+    let serverErrorMsg = null;
+    let needsIgAuth = false;
 
-    // 1. Try configured / hosted backend endpoints (supports Netlify -> Render / Railway / Local)
-    const backendEndpoints = [
-        '/api/extract',
-        'https://ashx-downloader-api.onrender.com/api/extract'
-    ];
+    // 1. Primary Backend Media Extraction Engine
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 35000);
+        const igSessionId = localStorage.getItem('ashx_ig_sessionid') || '';
 
-    for (const ep of backendEndpoints) {
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 25000);
-            
-            let response = await fetch(ep, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: rawUrl }),
-                signal: controller.signal
-            });
-            clearTimeout(timeoutId);
+        const response = await fetch('/api/extract', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-IG-SessionId': igSessionId
+            },
+            body: JSON.stringify({ 
+                url: rawUrl,
+                ig_sessionid: igSessionId
+            }),
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
 
-            if (response.ok) {
-                const res = await response.json();
-                if (res.success && res.data) {
-                    extractedData = res.data;
-                    break;
-                } else if (res.hd || res.video) {
-                    extractedData = {
-                        title: res.title || "Extracted Video",
-                        thumbnail: res.thumbnail || "",
-                        duration: 0,
-                        uploader: `${currentPlatform.toUpperCase()} Creator`,
-                        hd: { url: res.hd || res.video, quality: "1080p Full HD" },
-                        sd: { url: res.sd || res.video, quality: "480p SD" },
-                        audio: { url: res.hd || res.video, quality: "320kbps MP3 Audio" }
-                    };
-                    break;
-                }
-            }
-        } catch (e) {}
+        const res = await response.json();
+        if (response.ok && res.success && res.data) {
+            extractedData = res.data;
+        } else if (!response.ok) {
+            serverErrorMsg = res.error || null;
+            needsIgAuth = !!res.needs_ig_auth;
+        }
+    } catch (e) {
+        console.warn('Backend extract error:', e);
     }
 
-    // 2. Client-Side Multi-Gateway Extractor
-    if (!extractedData) {
+    // 2. Client-Side Gateway Extractor Fallback (if backend is unreachable)
+    if (!extractedData && !serverErrorMsg) {
         extractedData = await clientSideExtract(rawUrl);
     }
 
@@ -459,12 +495,16 @@ async function handleExtract() {
         saveToHistory(extractedData, rawUrl);
         updateIslandState('success', 'Media Ready', 'Full HD & MP3 Available');
     } else {
-        let msg = 'Could not extract media. Ensure the Reel/Post is public (not restricted or in a private account).';
-        if (currentPlatform === 'instagram') {
-            msg = 'Instagram blocked access to this reel. If this reel is age-restricted or private, Instagram requires a login. Public Instagram & Facebook reels work without login.';
-        }
+        let msg = serverErrorMsg || 'Could not extract media. Ensure the Reel or Video is public and active.';
         showError(msg);
-        updateIslandState('error', 'Extraction Failed', 'Reel may be private or restricted');
+        updateIslandState('error', 'Extraction Failed', needsIgAuth ? 'Instagram session required' : 'Media may be restricted');
+
+        if (needsIgAuth) {
+            setTimeout(() => {
+                const igModalEl = document.getElementById('ig-modal');
+                if (igModalEl) openModal(igModalEl);
+            }, 800);
+        }
     }
 }
 

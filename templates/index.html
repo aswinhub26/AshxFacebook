@@ -347,11 +347,18 @@
             </div>
         </div>
 
-        <!-- Guide Trigger -->
-        <button id="guide-modal-btn" class="mt-4 inline-flex items-center gap-1.5 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer">
-            <i data-lucide="help-circle" class="w-3 h-3"></i>
-            <span>How to save from Facebook, Instagram, YouTube & WhatsApp</span>
-        </button>
+        <!-- Guide & Settings Triggers -->
+        <div class="mt-4 flex flex-wrap items-center justify-center gap-3">
+            <button id="guide-modal-btn" class="inline-flex items-center gap-1.5 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer">
+                <i data-lucide="help-circle" class="w-3.5 h-3.5"></i>
+                <span>How to Save</span>
+            </button>
+            <span class="text-zinc-700">•</span>
+            <button id="ig-settings-btn" class="inline-flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-pink-300 transition-colors cursor-pointer px-2.5 py-1 rounded-full bg-white/[0.03] border border-white/5 hover:border-pink-500/30">
+                <i data-lucide="key" class="w-3 h-3 text-pink-400"></i>
+                <span>Instagram Key (Session ID)</span>
+            </button>
+        </div>
 
     </main>
 
@@ -368,11 +375,11 @@
             <div class="space-y-2.5 text-xs text-zinc-300">
                 <div class="p-3 rounded-xl bg-white/[0.03] border border-white/5 space-y-0.5">
                     <strong class="text-white block">1. Facebook & Instagram Reels</strong>
-                    <span class="text-zinc-400">Tap Share on any Reel/Post $\rightarrow$ Copy Link $\rightarrow$ Paste in AshxStudio.</span>
+                    <span class="text-zinc-400">Tap Share on any Reel/Post → Copy Link → Paste in AshxStudio.</span>
                 </div>
                 <div class="p-3 rounded-xl bg-white/[0.03] border border-white/5 space-y-0.5">
                     <strong class="text-white block">2. YouTube Shorts & Videos</strong>
-                    <span class="text-zinc-400">Tap Share $\rightarrow$ Copy Link $\rightarrow$ Choose Full HD MP4 or MP3 Audio.</span>
+                    <span class="text-zinc-400">Tap Share → Copy Link → Download HD MP4 with audio or HQ Audio.</span>
                 </div>
                 <div class="p-3 rounded-xl bg-white/[0.03] border border-white/5 space-y-0.5">
                     <strong class="text-white block">3. WhatsApp Status</strong>
@@ -386,6 +393,53 @@
         </div>
     </div>
 
+    <!-- Instagram Session Settings Modal -->
+    <div id="ig-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-2xl flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="luxury-glass-panel prism-edge w-full max-w-md p-6 relative space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-white/10">
+                <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-full bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 flex items-center justify-center">
+                        <i data-lucide="instagram" class="w-4 h-4 text-white"></i>
+                    </div>
+                    <h3 class="text-sm font-semibold text-white">Instagram Login Session</h3>
+                </div>
+                <button id="close-ig-btn" class="text-zinc-400 hover:text-white p-1 cursor-pointer">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <p class="text-xs text-zinc-300 leading-relaxed">
+                Instagram blocks cloud servers from accessing reels without a session. Paste your Instagram <code class="px-1.5 py-0.5 rounded bg-white/10 text-pink-300 font-mono">sessionid</code> cookie value below to unlock 100% of Instagram Reels & Posts!
+            </p>
+
+            <div class="space-y-1.5 text-left">
+                <label class="text-[11px] text-zinc-400 font-medium">Instagram Session ID</label>
+                <input type="text" id="ig-sessionid-input" placeholder="e.g. 68291823%3AGHk... or paste sessionid" class="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-pink-500/50 font-mono transition-all">
+                <div id="ig-key-status" class="text-[10px] text-emerald-400 hidden flex items-center gap-1">
+                    <i data-lucide="check-circle" class="w-3 h-3"></i>
+                    <span>Instagram Session Saved</span>
+                </div>
+            </div>
+
+            <div class="p-3 rounded-xl bg-white/[0.02] border border-white/5 space-y-1.5 text-[11px] text-zinc-400">
+                <strong class="text-white block font-medium">Quick 10-Second Guide:</strong>
+                <div>1. Log into Instagram.com on your laptop or phone browser.</div>
+                <div>2. Open Browser DevTools (F12) → <strong>Application</strong> / <strong>Storage</strong> → <strong>Cookies</strong>.</div>
+                <div>3. Copy the value of <code class="text-pink-300">sessionid</code> and paste above!</div>
+                <div class="text-[10px] text-zinc-500 pt-1">Note: You can also set <code class="text-zinc-300">IG_SESSIONID</code> in your Render Environment Variables for automatic server-wide access.</div>
+            </div>
+
+            <div class="flex items-center gap-2 pt-1">
+                <button type="button" id="save-ig-btn" class="btn-platinum flex-1 py-2.5 rounded-xl text-white font-medium text-xs cursor-pointer">
+                    Save Key
+                </button>
+                <button type="button" id="clear-ig-btn" class="px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white text-xs transition-colors cursor-pointer">
+                    Clear Key
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Floating Footer -->
     <footer class="relative z-20 pb-4 text-center">
         <span class="text-[10px] text-zinc-600 tracking-wider">
@@ -394,7 +448,7 @@
     </footer>
 
     <!-- Scripts -->
-    <script src="/static/app.js?v=6.0"></script>
+    <script src="/static/app.js?v=7.0"></script>
     <script>
         if (window.lucide) lucide.createIcons();
 
@@ -405,7 +459,7 @@
                     r.update();
                 }
             });
-            navigator.serviceWorker.register('/sw.js?v=6.0');
+            navigator.serviceWorker.register('/sw.js?v=7.0');
         }
 
         const card = document.getElementById('card-container');
