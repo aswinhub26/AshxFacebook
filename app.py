@@ -59,7 +59,7 @@ def extract_media(url: str, custom_sessionid: str = None):
         'socket_timeout': 10,
         'extractor_args': {
             'youtube': {
-                'player_client': ['ios', 'android']
+                'player_client': ['android', 'android_vr']
             }
         }
     }
@@ -222,7 +222,7 @@ def extract():
         
     return jsonify({
         "success": False, 
-        "error": "Could not extract media. Ensure the link is public and active."
+        "error": f"Extraction error: {err_str}" if 'err_str' in locals() else "Could not extract media. Ensure the link is public and active."
     }), 422
 
 @app.route('/api/download')
