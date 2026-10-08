@@ -47,7 +47,7 @@ def clean_url(raw_url: str) -> str:
             logger.warning(f"Could not resolve redirect: {e}")
     return raw_url
 
-def extract_media(url: str, custom_sessionid: str = None):
+def extract_media(url: str, custom_sessionid: str = None, custom_cookies: str = None):
     """Multi-platform media extractor for FB Reels, Insta Reels, YouTube Shorts, etc."""
     ydl_opts = {
         'format': 'best[ext=mp4]/bestvideo+bestaudio/best',
@@ -65,27 +65,47 @@ def extract_media(url: str, custom_sessionid: str = None):
     }
     
     cookie_file = None
-    if os.path.exists('cookies.txt'):
-        cookie_file = 'cookies.txt'
-    elif os.environ.get('IG_COOKIES'):
-        try:
-            with open('ig_cookies.txt', 'w') as f:
-                f.write(os.environ.get('IG_COOKIES'))
-            cookie_file = 'ig_cookies.txt'
-        except Exception as ce:
-            logger.warning(f"Could not write cookie file: {ce}")
-    elif custom_sessionid or os.environ.get('IG_SESSIONID'):
-        sess_val = (custom_sessionid or os.environ.get('IG_SESSIONID')).strip()
-        try:
-            netscape_cookie = (
-                "# Netscape HTTP Cookie File\n"
-                f".instagram.com\tTRUE\t/\tTRUE\t2147483647\tsessionid\t{sess_val}\n"
-            )
-            with open('ig_session_cookies.txt', 'w') as f:
-                f.write(netscape_cookie)
-            cookie_file = 'ig_session_cookies.txt'
-        except Exception as ce:
-            logger.warning(f"Could not write session cookie file: {ce}")
+    is_ig = "instagram.com" in url.lower()
+    
+    if is_ig:
+        if custom_sessionid or os.environ.get('IG_SESSIONID'):
+            sess_val = (custom_sessionid or os.environ.get('IG_SESSIONID')).strip()
+            try:
+                netscape_cookie = (
+                    "# Netscape HTTP Cookie File\n"
+                    f".instagram.com\tTRUE\t/\tTRUE\t2147483647\tsessionid\t{sess_val}\n"
+                )
+                with open('ig_session_cookies.txt', 'w', encoding='utf-8') as f:
+                    f.write(netscape_cookie)
+                cookie_file = 'ig_session_cookies.txt'
+            except Exception as ce:
+                logger.warning(f"Could not write session cookie file: {ce}")
+        elif os.environ.get('IG_COOKIES'):
+            try:
+                with open('ig_cookies.txt', 'w', encoding='utf-8') as f:
+                    f.write(os.environ.get('IG_COOKIES'))
+                cookie_file = 'ig_cookies.txt'
+            except Exception as ce:
+                logger.warning(f"Could not write cookie file: {ce}")
+        elif custom_cookies:
+            try:
+                with open('custom_cookies.txt', 'w', encoding='utf-8') as f:
+                    f.write(custom_cookies.strip())
+                cookie_file = 'custom_cookies.txt'
+            except Exception as ce:
+                logger.warning(f"Could not write custom cookie file: {ce}")
+    else:
+        # YouTube / Facebook / Universal
+        if custom_cookies or os.environ.get('YT_COOKIES') or os.environ.get('COOKIES'):
+            raw_c = (custom_cookies or os.environ.get('YT_COOKIES') or os.environ.get('COOKIES')).strip()
+            try:
+                with open('yt_cookies.txt', 'w', encoding='utf-8') as f:
+                    f.write(raw_c)
+                cookie_file = 'yt_cookies.txt'
+            except Exception as ce:
+                logger.warning(f"Could not write yt cookie file: {ce}")
+        elif os.path.exists('cookies.txt'):
+            cookie_file = 'cookies.txt'
 
     if cookie_file:
         ydl_opts['cookiefile'] = cookie_file
@@ -190,6 +210,7 @@ def extract():
     data = request.get_json() or {}
     url = data.get('url', '').strip()
     custom_sessionid = data.get('ig_sessionid', '').strip() or request.headers.get('X-IG-SessionId', '').strip()
+    custom_cookies = data.get('cookies', '').strip() or request.headers.get('X-Custom-Cookies', '').strip()
     
     if not url:
         return jsonify({"success": False, "error": "Please provide a valid media link."}), 400
@@ -197,33 +218,40 @@ def extract():
     cleaned = clean_url(url)
     
     try:
-        info = extract_media(cleaned, custom_sessionid=custom_sessionid)
+        info = extract_media(cleaned, custom_sessionid=custom_sessionid, custom_cookies=custom_cookies)
         if info and (info.get('hd', {}).get('url') or info.get('audio', {}).get('url')):
             return jsonify({"success": True, "data": info})
     except Exception as e:
         err_str = str(e)
         logger.warning(f"yt-dlp extraction error: {err_str}")
-        if "not granting access" in err_str or "empty media response" in err_str or "login" in err_str.lower():
+        lower_err = err_str.lower()
+        if "not granting access" in lower_err or "empty media response" in lower_err:
             return jsonify({
                 "success": False, 
-                "error": "Instagram restricted access to this Reel without a login session. Add your Instagram Session ID in AshxStudio Settings or in Render environment variables (IG_SESSIONID).",
+                "error": "Instagram restricted access to this Reel without a login session. Add your Instagram Session ID in Access Keys & Cookies settings.",
                 "needs_ig_auth": True
             }), 403
-        elif "private" in err_str.lower():
+        elif "bot" in lower_err or "sign in to confirm" in lower_err or "please sign in" in lower_err or "sign in." in lower_err:
+            return jsonify({
+                "success": False, 
+                "error": "YouTube blocked cloud server requests with a bot verification check. Add your YouTube cookies in Access Keys & Cookies settings to unlock full downloading.",
+                "needs_yt_auth": True
+            }), 403
+        elif "private" in lower_err:
             return jsonify({
                 "success": False, 
                 "error": "This post is from a Private Account. Only public media can be downloaded without authentication."
             }), 403
-        elif "copyright" in err_str.lower() or "blocked" in err_str.lower():
+        elif "copyright" in lower_err or "blocked" in lower_err:
             return jsonify({
                 "success": False, 
                 "error": "This media is blocked or restricted by the platform."
             }), 403
         
-    return jsonify({
-        "success": False, 
-        "error": f"Extraction error: {err_str}" if 'err_str' in locals() else "Could not extract media. Ensure the link is public and active."
-    }), 422
+        return jsonify({
+            "success": False, 
+            "error": f"Extraction error: {err_str}"
+        }), 422
 
 @app.route('/api/download')
 def download():
