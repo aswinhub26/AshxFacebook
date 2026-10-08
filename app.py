@@ -28,7 +28,17 @@ HEADERS = {
 def clean_url(raw_url: str) -> str:
     """Cleans social URLs and resolves redirects."""
     raw_url = raw_url.strip()
-    if any(k in raw_url for k in ['share/r/', 'share/v/', 'youtu.be/', 'fb.watch/']):
+    
+    # Fast regex normalization for YouTube Shorts and youtu.be to avoid network redirects
+    shorts_match = re.search(r'youtube\.com/shorts/([a-zA-Z0-9_-]+)', raw_url)
+    if shorts_match:
+        return f"https://www.youtube.com/watch?v={shorts_match.group(1)}"
+        
+    youtu_match = re.search(r'youtu\.be/([a-zA-Z0-9_-]+)', raw_url)
+    if youtu_match:
+        return f"https://www.youtube.com/watch?v={youtu_match.group(1)}"
+
+    if any(k in raw_url for k in ['share/r/', 'share/v/', 'fb.watch/']):
         try:
             resp = requests.head(raw_url, headers=HEADERS, allow_redirects=True, timeout=5)
             if resp.url:
@@ -46,9 +56,10 @@ def extract_media(url: str, custom_sessionid: str = None):
         'skip_download': True,
         'extract_flat': False,
         'nocheckcertificate': True,
+        'socket_timeout': 10,
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'ios', 'mweb', 'web']
+                'player_client': ['ios', 'android']
             }
         }
     }
