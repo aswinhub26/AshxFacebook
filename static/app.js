@@ -42,19 +42,11 @@ const historyList = document.getElementById('history-list');
 const emptyHistory = document.getElementById('empty-history');
 const clearHistoryBtn = document.getElementById('clear-history-btn');
 
+// Guide modal DOM
 const guideModal = document.getElementById('guide-modal');
 const guideModalBtn = document.getElementById('guide-modal-btn');
 const closeGuideBtn = document.getElementById('close-guide-btn');
 const dismissGuideBtn = document.getElementById('dismiss-guide-btn');
-
-const igModal = document.getElementById('ig-modal');
-const igSettingsBtn = document.getElementById('ig-settings-btn');
-const closeIgBtn = document.getElementById('close-ig-btn');
-const saveIgBtn = document.getElementById('save-ig-btn');
-const clearIgBtn = document.getElementById('clear-ig-btn');
-const igSessionIdInput = document.getElementById('ig-sessionid-input');
-const cookiesInput = document.getElementById('cookies-input');
-const igKeyStatus = document.getElementById('ig-key-status');
 
 const clipboardToast = document.getElementById('clipboard-toast');
 const clipboardToastIcon = document.getElementById('clipboard-toast-icon');
@@ -273,53 +265,6 @@ function setupEventListeners() {
     guideModalBtn.addEventListener('click', () => openModal(guideModal));
     closeGuideBtn.addEventListener('click', () => closeModal(guideModal));
     dismissGuideBtn.addEventListener('click', () => closeModal(guideModal));
-
-    if (igSettingsBtn) {
-        igSettingsBtn.addEventListener('click', () => {
-            const savedKey = localStorage.getItem('ashx_ig_sessionid') || '';
-            const savedCookies = localStorage.getItem('ashx_custom_cookies') || '';
-            if (igSessionIdInput) igSessionIdInput.value = savedKey;
-            if (cookiesInput) cookiesInput.value = savedCookies;
-            if (igKeyStatus) {
-                if (savedKey || savedCookies) igKeyStatus.classList.remove('hidden');
-                else igKeyStatus.classList.add('hidden');
-            }
-            openModal(igModal);
-        });
-    }
-    if (closeIgBtn) closeIgBtn.addEventListener('click', () => closeModal(igModal));
-    if (saveIgBtn) {
-        saveIgBtn.addEventListener('click', () => {
-            const val = igSessionIdInput ? igSessionIdInput.value.trim() : '';
-            const cookiesVal = cookiesInput ? cookiesInput.value.trim() : '';
-            if (val) {
-                localStorage.setItem('ashx_ig_sessionid', val);
-            } else {
-                localStorage.removeItem('ashx_ig_sessionid');
-            }
-            if (cookiesVal) {
-                localStorage.setItem('ashx_custom_cookies', cookiesVal);
-            } else {
-                localStorage.removeItem('ashx_custom_cookies');
-            }
-            if (igKeyStatus) {
-                if (val || cookiesVal) igKeyStatus.classList.remove('hidden');
-                else igKeyStatus.classList.add('hidden');
-            }
-            updateIslandState('success', 'Keys & Cookies Saved', 'Active for YouTube & Instagram');
-            closeModal(igModal);
-        });
-    }
-    if (clearIgBtn) {
-        clearIgBtn.addEventListener('click', () => {
-            localStorage.removeItem('ashx_ig_sessionid');
-            localStorage.removeItem('ashx_custom_cookies');
-            if (igSessionIdInput) igSessionIdInput.value = '';
-            if (cookiesInput) cookiesInput.value = '';
-            if (igKeyStatus) igKeyStatus.classList.add('hidden');
-            updateIslandState('active', 'Keys & Cookies Cleared', '');
-        });
-    }
 }
 
 // Smart Clipboard Functions
@@ -467,20 +412,13 @@ async function handleExtract() {
     try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 35000);
-        const igSessionId = localStorage.getItem('ashx_ig_sessionid') || '';
-        const customCookies = localStorage.getItem('ashx_custom_cookies') || '';
-
         const response = await fetch('/api/extract', {
             method: 'POST',
             headers: { 
-                'Content-Type': 'application/json',
-                'X-IG-SessionId': igSessionId,
-                'X-Custom-Cookies': customCookies
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({ 
-                url: rawUrl,
-                ig_sessionid: igSessionId,
-                cookies: customCookies
+                url: rawUrl
             }),
             signal: controller.signal
         });
@@ -491,8 +429,6 @@ async function handleExtract() {
             extractedData = res.data;
         } else if (!response.ok) {
             serverErrorMsg = res.error || null;
-            needsIgAuth = !!res.needs_ig_auth;
-            needsYtAuth = !!res.needs_yt_auth;
         }
     } catch (e) {
         console.warn('Backend extract error:', e);
@@ -515,25 +451,7 @@ async function handleExtract() {
     } else {
         let msg = serverErrorMsg || 'Could not extract media. Ensure the Reel or Video is public and active.';
         showError(msg);
-        updateIslandState('error', 'Extraction Failed', needsYtAuth ? 'YouTube cookies required' : (needsIgAuth ? 'Instagram session required' : 'Media may be restricted'));
-
-        if (needsIgAuth || needsYtAuth) {
-            setTimeout(() => {
-                const igModalEl = document.getElementById('ig-modal');
-                if (igModalEl) {
-                    const savedKey = localStorage.getItem('ashx_ig_sessionid') || '';
-                    const savedCookies = localStorage.getItem('ashx_custom_cookies') || '';
-                    if (igSessionIdInput) igSessionIdInput.value = savedKey;
-                    if (cookiesInput) cookiesInput.value = savedCookies;
-                    openModal(igModalEl);
-                    if (needsYtAuth && cookiesInput) {
-                        cookiesInput.focus();
-                    } else if (needsIgAuth && igSessionIdInput) {
-                        igSessionIdInput.focus();
-                    }
-                }
-            }, 600);
-        }
+        updateIslandState('error', 'Extraction Failed', 'Media may be restricted or link expired');
     }
 }
 

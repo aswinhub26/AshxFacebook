@@ -47,29 +47,18 @@ def clean_url(raw_url: str) -> str:
             logger.warning(f"Could not resolve redirect: {e}")
     return raw_url
 
-def extract_media(url: str, custom_sessionid: str = None, custom_cookies: str = None):
+def extract_media(url: str):
     """Multi-platform media extractor for FB Reels, Insta Reels, YouTube Shorts, etc."""
-    ydl_opts = {
-        'format': 'best[ext=mp4]/bestvideo+bestaudio/best',
-        'quiet': True,
-        'no_warnings': True,
-        'skip_download': True,
-        'extract_flat': False,
-        'nocheckcertificate': True,
-        'socket_timeout': 10,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'android_vr']
-            }
-        }
-    }
-    
-    cookie_file = None
+    is_yt = any(k in url.lower() for k in ['youtube.com', 'youtu.be'])
     is_ig = "instagram.com" in url.lower()
-    
+
+    # Tiered player clients for YouTube: try android+web first, then default
+    client_tiers = [['android', 'web'], None] if is_yt else [None]
+
+    cookie_file = None
     if is_ig:
-        if custom_sessionid or os.environ.get('IG_SESSIONID'):
-            sess_val = (custom_sessionid or os.environ.get('IG_SESSIONID')).strip()
+        if os.environ.get('IG_SESSIONID'):
+            sess_val = os.environ.get('IG_SESSIONID').strip()
             try:
                 netscape_cookie = (
                     "# Netscape HTTP Cookie File\n"
@@ -87,17 +76,9 @@ def extract_media(url: str, custom_sessionid: str = None, custom_cookies: str = 
                 cookie_file = 'ig_cookies.txt'
             except Exception as ce:
                 logger.warning(f"Could not write cookie file: {ce}")
-        elif custom_cookies:
-            try:
-                with open('custom_cookies.txt', 'w', encoding='utf-8') as f:
-                    f.write(custom_cookies.strip())
-                cookie_file = 'custom_cookies.txt'
-            except Exception as ce:
-                logger.warning(f"Could not write custom cookie file: {ce}")
     else:
-        # YouTube / Facebook / Universal
-        if custom_cookies or os.environ.get('YT_COOKIES') or os.environ.get('COOKIES'):
-            raw_c = (custom_cookies or os.environ.get('YT_COOKIES') or os.environ.get('COOKIES')).strip()
+        if os.environ.get('YT_COOKIES') or os.environ.get('COOKIES'):
+            raw_c = (os.environ.get('YT_COOKIES') or os.environ.get('COOKIES')).strip()
             try:
                 with open('yt_cookies.txt', 'w', encoding='utf-8') as f:
                     f.write(raw_c)
@@ -107,84 +88,114 @@ def extract_media(url: str, custom_sessionid: str = None, custom_cookies: str = 
         elif os.path.exists('cookies.txt'):
             cookie_file = 'cookies.txt'
 
-    if cookie_file:
-        ydl_opts['cookiefile'] = cookie_file
-    
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-        formats = info.get('formats', [])
-        
-        # 1. Progressive formats (both video and audio with direct HTTP/HTTPS url)
-        prog_videos = [
-            f for f in formats 
-            if f.get('vcodec') != 'none' and f.get('acodec') != 'none' 
-            and f.get('url') and 'm3u8' not in f.get('protocol', '')
-        ]
-        prog_videos.sort(key=lambda x: (x.get('height') or 0, x.get('tbr') or 0), reverse=True)
+    info = None
+    last_err = None
 
-        # 2. Direct video formats (if progressive not present)
-        all_videos = [
-            f for f in formats 
-            if f.get('vcodec') != 'none' and f.get('url') 
-            and 'm3u8' not in f.get('protocol', '')
-        ]
-        all_videos.sort(key=lambda x: (x.get('height') or 0, x.get('tbr') or 0), reverse=True)
-
-        # 3. Direct audio formats
-        audios = [
-            f for f in formats 
-            if f.get('acodec') != 'none' and f.get('url') 
-            and 'm3u8' not in f.get('protocol', '')
-        ]
-        audios.sort(key=lambda x: (x.get('abr') or x.get('tbr') or 0), reverse=True)
-
-        chosen_hd = prog_videos[0] if prog_videos else (all_videos[0] if all_videos else None)
-        chosen_sd = prog_videos[-1] if prog_videos else (all_videos[-1] if all_videos else None)
-        chosen_audio = audios[0] if audios else (chosen_hd if chosen_hd else None)
-
-        direct_hd_url = chosen_hd.get('url') if chosen_hd else info.get('url')
-        direct_sd_url = chosen_sd.get('url') if chosen_sd else direct_hd_url
-        direct_audio_url = chosen_audio.get('url') if chosen_audio else direct_hd_url
-
-        platform = "Universal"
-        if "facebook" in url or "fb.watch" in url: platform = "Facebook"
-        elif "instagram" in url: platform = "Instagram"
-        elif "youtube" in url or "youtu.be" in url: platform = "YouTube"
-        elif "whatsapp" in url: platform = "WhatsApp"
-
-        hd_height = chosen_hd.get('height') if chosen_hd else None
-        sd_height = chosen_sd.get('height') if chosen_sd else None
-        
-        hd_label = f"{hd_height}p HD (Sound Included)" if hd_height else "1080p Full HD"
-        sd_label = f"{sd_height}p SD (Sound Included)" if sd_height else "480p Standard"
-        
-        audio_ext = "mp3"
-        if chosen_audio and chosen_audio.get('ext') in ['m4a', 'aac', 'mp3']:
-            audio_ext = chosen_audio.get('ext')
-
-        return {
-            "platform": platform,
-            "title": info.get('title') or f"AshxStudio {platform} Media",
-            "description": info.get('description') or "",
-            "thumbnail": info.get('thumbnail') or "",
-            "duration": info.get('duration') or 0,
-            "uploader": info.get('uploader') or info.get('channel') or f"{platform} Creator",
-            "hd": {
-                "url": direct_hd_url,
-                "quality": hd_label,
-                "ext": "mp4"
-            },
-            "sd": {
-                "url": direct_sd_url,
-                "quality": sd_label,
-                "ext": "mp4"
-            },
-            "audio": {
-                "url": direct_audio_url,
-                "quality": "320kbps Audio (HQ)",
-                "ext": audio_ext
-            }
+    for client_list in client_tiers:
+        ydl_opts = {
+            'format': 'best[ext=mp4]/bestvideo+bestaudio/best',
+            'quiet': True,
+            'no_warnings': True,
+            'skip_download': True,
+            'extract_flat': False,
+            'nocheckcertificate': True,
+            'socket_timeout': 15,
         }
+        if client_list:
+            ydl_opts['extractor_args'] = {
+                'youtube': {
+                    'player_client': client_list
+                }
+            }
+        if cookie_file:
+            ydl_opts['cookiefile'] = cookie_file
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                if info:
+                    break
+        except Exception as e:
+            last_err = e
+            continue
+
+    if not info:
+        if last_err:
+            raise last_err
+        raise Exception("Could not extract media info")
+
+    formats = info.get('formats', [])
+    # 1. Progressive formats (both video and audio with direct HTTP/HTTPS url)
+    prog_videos = [
+        f for f in formats 
+        if f.get('vcodec') != 'none' and f.get('acodec') != 'none' 
+        and f.get('url') and 'm3u8' not in f.get('protocol', '')
+    ]
+    prog_videos.sort(key=lambda x: (x.get('height') or 0, x.get('tbr') or 0), reverse=True)
+
+    # 2. Direct video formats (if progressive not present)
+    all_videos = [
+        f for f in formats 
+        if f.get('vcodec') != 'none' and f.get('url') 
+        and 'm3u8' not in f.get('protocol', '')
+    ]
+    all_videos.sort(key=lambda x: (x.get('height') or 0, x.get('tbr') or 0), reverse=True)
+
+    # 3. Direct audio formats
+    audios = [
+        f for f in formats 
+        if f.get('acodec') != 'none' and f.get('url') 
+        and 'm3u8' not in f.get('protocol', '')
+    ]
+    audios.sort(key=lambda x: (x.get('abr') or x.get('tbr') or 0), reverse=True)
+
+    chosen_hd = prog_videos[0] if prog_videos else (all_videos[0] if all_videos else None)
+    chosen_sd = prog_videos[-1] if prog_videos else (all_videos[-1] if all_videos else None)
+    chosen_audio = audios[0] if audios else (chosen_hd if chosen_hd else None)
+
+    direct_hd_url = chosen_hd.get('url') if chosen_hd else info.get('url')
+    direct_sd_url = chosen_sd.get('url') if chosen_sd else direct_hd_url
+    direct_audio_url = chosen_audio.get('url') if chosen_audio else direct_hd_url
+
+    platform = "Universal"
+    if "facebook" in url or "fb.watch" in url: platform = "Facebook"
+    elif "instagram" in url: platform = "Instagram"
+    elif "youtube" in url or "youtu.be" in url: platform = "YouTube"
+    elif "whatsapp" in url: platform = "WhatsApp"
+
+    hd_height = chosen_hd.get('height') if chosen_hd else None
+    sd_height = chosen_sd.get('height') if chosen_sd else None
+    
+    hd_label = f"{hd_height}p HD (Sound Included)" if hd_height else "1080p Full HD"
+    sd_label = f"{sd_height}p SD (Sound Included)" if sd_height else "480p Standard"
+    
+    audio_ext = "mp3"
+    if chosen_audio and chosen_audio.get('ext') in ['m4a', 'aac', 'mp3']:
+        audio_ext = chosen_audio.get('ext')
+
+    return {
+        "platform": platform,
+        "title": info.get('title') or f"AshxStudio {platform} Media",
+        "description": info.get('description') or "",
+        "thumbnail": info.get('thumbnail') or "",
+        "duration": info.get('duration') or 0,
+        "uploader": info.get('uploader') or info.get('channel') or f"{platform} Creator",
+        "hd": {
+            "url": direct_hd_url,
+            "quality": hd_label,
+            "ext": "mp4"
+        },
+        "sd": {
+            "url": direct_sd_url,
+            "quality": sd_label,
+            "ext": "mp4"
+        },
+        "audio": {
+            "url": direct_audio_url,
+            "quality": "320kbps Audio (HQ)",
+            "ext": audio_ext
+        }
+    }
 
 @app.route('/')
 def index():
@@ -209,8 +220,6 @@ def add_header(response):
 def extract():
     data = request.get_json() or {}
     url = data.get('url', '').strip()
-    custom_sessionid = data.get('ig_sessionid', '').strip() or request.headers.get('X-IG-SessionId', '').strip()
-    custom_cookies = data.get('cookies', '').strip() or request.headers.get('X-Custom-Cookies', '').strip()
     
     if not url:
         return jsonify({"success": False, "error": "Please provide a valid media link."}), 400
@@ -218,29 +227,17 @@ def extract():
     cleaned = clean_url(url)
     
     try:
-        info = extract_media(cleaned, custom_sessionid=custom_sessionid, custom_cookies=custom_cookies)
+        info = extract_media(cleaned)
         if info and (info.get('hd', {}).get('url') or info.get('audio', {}).get('url')):
             return jsonify({"success": True, "data": info})
     except Exception as e:
         err_str = str(e)
         logger.warning(f"yt-dlp extraction error: {err_str}")
         lower_err = err_str.lower()
-        if "not granting access" in lower_err or "empty media response" in lower_err:
+        if "private" in lower_err:
             return jsonify({
                 "success": False, 
-                "error": "Instagram restricted access to this Reel without a login session. Add your Instagram Session ID in Access Keys & Cookies settings.",
-                "needs_ig_auth": True
-            }), 403
-        elif "bot" in lower_err or "sign in to confirm" in lower_err or "please sign in" in lower_err or "sign in." in lower_err:
-            return jsonify({
-                "success": False, 
-                "error": "YouTube blocked cloud server requests with a bot verification check. Add your YouTube cookies in Access Keys & Cookies settings to unlock full downloading.",
-                "needs_yt_auth": True
-            }), 403
-        elif "private" in lower_err:
-            return jsonify({
-                "success": False, 
-                "error": "This post is from a Private Account. Only public media can be downloaded without authentication."
+                "error": "This post is from a Private Account. Only public media can be downloaded."
             }), 403
         elif "copyright" in lower_err or "blocked" in lower_err:
             return jsonify({
@@ -250,7 +247,7 @@ def extract():
         
         return jsonify({
             "success": False, 
-            "error": f"Extraction error: {err_str}"
+            "error": "Could not extract media. Ensure the Reel or Video is public and active."
         }), 422
 
 @app.route('/api/download')
